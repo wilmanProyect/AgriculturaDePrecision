@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2">
+  <Document>
+    <name>Parcelas de Prueba</name>
+    <Placemark>
+      <name>Parcela A</name>
+      <Polygon>
+        <outerBoundaryIs>
+          <LinearRing>
+            <coordinates>
+              -3.95,40.45,0 -3.9,40.45,0 -3.9,40.4,0 -3.95,40.4,0 -3.95,40.45,0
+            </coordinates>
+          </LinearRing>
+        </outerBoundaryIs>
+      </Polygon>
+    </Placemark>
+    <Placemark>
+      <name>Parcela B</name>
+      <Polygon>
+        <outerBoundaryIs>
+          <LinearRing>
+            <coordinates>
+              -3.89,40.45,0 -3.84,40.45,0 -3.84,40.4,0 -3.89,40.4,0 -3.89,40.45,0
+            </coordinates>
+          </LinearRing>
+        </outerBoundaryIs>
+      </Polygon>
+    </Placemark>
+  </Document>
+</kml>

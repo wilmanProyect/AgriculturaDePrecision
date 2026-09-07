@@ -1,0 +1,5 @@
+# Entornos de Python y dependencias instaladas
+.venv/
+venv/
+.conda_env/
+__pypackages__/

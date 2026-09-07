@@ -1,0 +1,28 @@
+# Configuración por defecto del sistema de Agricultura de Precisión.
+
+ai:
+  model:
+    architecture: yolo11n.pt          # Checkpoint base: yolo11n/s/m/l/x.pt
+    weights_path: data/models/plant_detector/weights/best.pt
+    device: cuda                      # 'cuda' si hay GPU NVIDIA disponible, si no 'cpu'
+    imgsz: 640
+    conf_threshold: 0.25
+    iou_threshold: 0.45
+
+  classes:
+    0: planta
+    1: arbol
+    2: espacio_vacio
+
+  training:
+    dataset_dir: data/images
+    data_yaml: data/images/data.yaml
+    epochs: 100
+    batch: 16
+    patience: 50
+    project: data/models
+    name: plant_detector
+
+  inference:
+    tile_size: 1024
+    overlap: 0.2

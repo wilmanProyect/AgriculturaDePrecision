@@ -1,0 +1,30 @@
+# --- Inteligencia Artificial y Aprendizaje Profundo ---
+torch
+torchvision
+ultralytics>=8.3.0  # YOLOv11 (detección y segmentación)
+transformers
+
+# --- Procesamiento de Imágenes y Visión por Computador ---
+opencv-python
+scikit-image
+pillow
+
+# --- GIS y Datos Espaciales ---
+rasterio
+geopandas
+shapely
+fiona
+pyproj
+
+# --- Análisis de Datos y Utilidades ---
+numpy
+pandas
+scikit-learn
+matplotlib
+pyyaml
+tqdm
+
+# --- Entorno de Desarrollo ---
+ipykernel
+jupyter
+pytest
