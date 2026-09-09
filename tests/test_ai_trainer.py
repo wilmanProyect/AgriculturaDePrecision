@@ -5,6 +5,7 @@ Ultralytics se sustituye por un doble de prueba: verificamos que YOLOTrainer
 propague correctamente la configuración y maneje los errores esperados.
 """
 
+import os
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -45,7 +46,8 @@ def test_train_calls_ultralytics_with_expected_params(tmp_path):
     mock_yolo.assert_called_once_with("yolo11n.pt")
     mock_model_instance.train.assert_called_once_with(
         data=str(data_yaml), epochs=5, imgsz=320, batch=4,
-        device="cpu", patience=50, project="data/models", name="test_run"
+        device="cpu", patience=50, project=os.path.abspath("data/models"), name="test_run",
+        workers=4
     )
 
 

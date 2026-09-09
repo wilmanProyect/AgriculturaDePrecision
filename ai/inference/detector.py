@@ -6,10 +6,10 @@ mediante tiling, y georreferencia cada detección usando el Motor GIS.
 """
 
 import os
-from typing import Dict, List, Optional
+from typing import Callable, Dict, List, Optional, Tuple
 
 import numpy as np
-from rasterio.windows import Window
+from rasterio.windows import Window, from_bounds
 
 from core.exceptions import InferenceError, ModelLoadError, ModelNotFoundError
 from core.gis.raster.raster_manager import RasterManager
@@ -121,14 +121,29 @@ class PlantDetector:
         raster_manager: RasterManager,
         tile_size: int = 1024,
         overlap: float = 0.2,
-        bands: Optional[List[int]] = None
+        bands: Optional[List[int]] = None,
+        progress_callback: Optional[Callable[[int, int], None]] = None,
+        bounds: Optional[Tuple[float, float, float, float]] = None,
+        should_stop: Optional[Callable[[], bool]] = None
     ) -> List[Detection]:
         """
-        Ejecuta inferencia YOLO11 sobre un ortomosaico completo, dividiéndolo en tiles
-        solapados para no perder detecciones en los bordes. Las coordenadas de cada
-        detección se reescalan al espacio de píxel del ortomosaico completo, se fusionan
-        los duplicados de los solapes con NMS, y finalmente se georreferencian usando
-        la transformación afín del ráster.
+        Ejecuta inferencia YOLO11 sobre un ortomosaico completo (o sobre una región de
+        interés dentro de él), dividiéndolo en tiles solapados para no perder detecciones
+        en los bordes. Las coordenadas de cada detección se reescalan al espacio de píxel
+        del ortomosaico completo, se fusionan los duplicados de los solapes con NMS, y
+        finalmente se georreferencian usando la transformación afín del ráster.
+
+        Si se indica `progress_callback`, se invoca como `progress_callback(tiles_procesados, total_tiles)`
+        después de procesar cada tile (útil para reportar avance en una interfaz, ej. QGIS).
+
+        Si se indica `bounds` (minx, miny, maxx, maxy) en el CRS del ráster, la inferencia
+        se limita a la ventana de píxeles que cubre esa región en lugar del ortomosaico
+        completo. Es fundamental para no procesar ortomosaicos enteros de decenas de GB
+        cuando solo interesa el área de una o varias parcelas.
+
+        Si se indica `should_stop`, se invoca antes de procesar cada tile; si devuelve True,
+        la inferencia se detiene y se devuelven las detecciones fusionadas hasta ese punto
+        (útil para permitir cancelación cooperativa desde una interfaz, ej. QgsTask.isCanceled).
         """
         self._ensure_loaded()
 
@@ -136,29 +151,51 @@ class PlantDetector:
             raise RuntimeError("El RasterManager debe tener un ortomosaico abierto (open()) antes de inferir.")
 
         dataset = raster_manager.dataset
-        width, height = dataset.width, dataset.height
         band_indices = bands or list(range(1, min(dataset.count, 3) + 1))
 
+        if bounds is not None:
+            roi_window = from_bounds(*bounds, transform=dataset.transform)
+            roi_window = roi_window.intersection(Window(0, 0, dataset.width, dataset.height))
+            roi_col_off = max(0, int(roi_window.col_off))
+            roi_row_off = max(0, int(roi_window.row_off))
+            width = roi_col_off + int(roi_window.width)
+            height = roi_row_off + int(roi_window.height)
+        else:
+            roi_col_off, roi_row_off = 0, 0
+            width, height = dataset.width, dataset.height
+
         stride = max(1, int(tile_size * (1 - overlap)))
+        offsets = [
+            (col_off, row_off)
+            for row_off in range(roi_row_off, height, stride)
+            for col_off in range(roi_col_off, width, stride)
+        ]
+        total_tiles = len(offsets)
         all_detections: List[Detection] = []
 
-        for row_off in range(0, height, stride):
-            for col_off in range(0, width, stride):
-                win_width = min(tile_size, width - col_off)
-                win_height = min(tile_size, height - row_off)
-                window = Window(col_off, row_off, win_width, win_height)
+        for tile_idx, (col_off, row_off) in enumerate(offsets, start=1):
+            if should_stop and should_stop():
+                logger.info(f"Inferencia cancelada tras procesar {tile_idx - 1}/{total_tiles} tiles.")
+                break
 
-                tile = dataset.read(band_indices, window=window)
-                tile_image = self._prepare_tile(tile)
+            win_width = min(tile_size, width - col_off)
+            win_height = min(tile_size, height - row_off)
+            window = Window(col_off, row_off, win_width, win_height)
 
-                tile_detections = self.predict(tile_image)
-                for detection in tile_detections:
-                    x1, y1, x2, y2 = detection.bbox_pixel
-                    detection.bbox_pixel = (x1 + col_off, y1 + row_off, x2 + col_off, y2 + row_off)
-                    cx, cy = detection.center_pixel
-                    detection.center_pixel = (cx + col_off, cy + row_off)
+            tile = dataset.read(band_indices, window=window)
+            tile_image = self._prepare_tile(tile)
 
-                all_detections.extend(tile_detections)
+            tile_detections = self.predict(tile_image)
+            for detection in tile_detections:
+                x1, y1, x2, y2 = detection.bbox_pixel
+                detection.bbox_pixel = (x1 + col_off, y1 + row_off, x2 + col_off, y2 + row_off)
+                cx, cy = detection.center_pixel
+                detection.center_pixel = (cx + col_off, cy + row_off)
+
+            all_detections.extend(tile_detections)
+
+            if progress_callback:
+                progress_callback(tile_idx, total_tiles)
 
         merged = non_max_suppression(all_detections, iou_threshold=self.iou_threshold)
         georeference_detections(merged, tuple(dataset.transform))

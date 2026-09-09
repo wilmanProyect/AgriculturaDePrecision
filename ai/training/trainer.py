@@ -18,7 +18,7 @@ class TrainingConfig:
     """Configuración de un entrenamiento YOLO11."""
 
     data_yaml: str                     # Ruta al data.yaml del dataset (ver DatasetConfig)
-    model_arch: str = "yolo11n.pt"     # Arquitectura/checkpoint base (yolo11n/s/m/l/x.pt)
+    model_arch: str = "yolo11m.pt"     # Arquitectura/checkpoint base (yolo11n/s/m/l/x.pt)
     epochs: int = 100
     imgsz: int = 640
     batch: int = 16
@@ -26,6 +26,8 @@ class TrainingConfig:
     patience: int = 50                 # Épocas sin mejora antes de early stopping
     project: str = "data/models"       # Carpeta donde Ultralytics guarda las corridas
     name: str = "plant_detector"       # Nombre de la corrida (project/name/weights/best.pt)
+    workers: int = 4                   # Procesos de carga de datos (en Windows, cada uno reimporta
+                                        # torch/ultralytics al iniciar: para datasets chicos, usar 0-2)
 
 
 class YOLOTrainer:
@@ -54,8 +56,13 @@ class YOLOTrainer:
                 batch=self.config.batch,
                 device=self.config.device,
                 patience=self.config.patience,
-                project=self.config.project,
-                name=self.config.name
+                # Ultralytics resuelve un `project` relativo respecto a su propio
+                # directorio "runs/<task>/" en vez del cwd, anidando los resultados
+                # en una ruta inesperada (ej. runs/detect/data/models/...). Usar una
+                # ruta absoluta evita esa sorpresa y respeta el `project` indicado.
+                project=os.path.abspath(self.config.project),
+                name=self.config.name,
+                workers=self.config.workers
             )
             logger.info(f"Entrenamiento finalizado. Resultados en: {self.config.project}/{self.config.name}")
             return results

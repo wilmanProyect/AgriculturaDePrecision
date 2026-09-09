@@ -15,6 +15,7 @@ geopandas
 shapely
 fiona
 pyproj
+rasterstats  # Estadísticas zonales (índices de vegetación por parcela)
 
 # --- Análisis de Datos y Utilidades ---
 numpy

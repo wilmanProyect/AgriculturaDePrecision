@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "agricultura-de-precision"
+version = "0.1.0"
+description = "Motor GIS + Motor IA (YOLO11) para Agricultura de Precisión"
+requires-python = ">=3.10"
+
+# Las dependencias se gestionan en requirements.txt, no aquí: este proyecto
+# se instala en editable (`pip install -e . --no-deps`) tanto en el entorno
+# de desarrollo como en el Python interno de QGIS, para no interferir con
+# los paquetes científicos que QGIS ya trae preinstalados (GDAL, geopandas...).
+dependencies = []
+
+[tool.setuptools.packages.find]
+include = ["core", "core.*", "ai", "ai.*"]

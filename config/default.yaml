@@ -2,7 +2,7 @@
 
 ai:
   model:
-    architecture: yolo11n.pt          # Checkpoint base: yolo11n/s/m/l/x.pt
+    architecture: yolo11m.pt          # Checkpoint base: yolo11n/s/m/l/x.pt
     weights_path: data/models/plant_detector/weights/best.pt
     device: cuda                      # 'cuda' si hay GPU NVIDIA disponible, si no 'cpu'
     imgsz: 640
@@ -18,7 +18,7 @@ ai:
     dataset_dir: data/images
     data_yaml: data/images/data.yaml
     epochs: 100
-    batch: 16
+    batch: -1                         # -1 = AutoBatch de Ultralytics (recomendado en GPUs de poca VRAM, ej. 4GB)
     patience: 50
     project: data/models
     name: plant_detector

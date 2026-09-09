@@ -1,0 +1,5 @@
+Metadata-Version: 2.4
+Name: agricultura-de-precision
+Version: 0.1.0
+Summary: Motor GIS + Motor IA (YOLO11) para Agricultura de Precisión
+Requires-Python: >=3.10

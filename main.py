@@ -54,7 +54,7 @@ def _run_train(ai_config: dict) -> None:
 
     trainer = YOLOTrainer(TrainingConfig(
         data_yaml=training_cfg.get("data_yaml", "data/images/data.yaml"),
-        model_arch=model_cfg.get("architecture", "yolo11n.pt"),
+        model_arch=model_cfg.get("architecture", "yolo11m.pt"),
         epochs=training_cfg.get("epochs", 100),
         imgsz=model_cfg.get("imgsz", 640),
         batch=training_cfg.get("batch", 16),

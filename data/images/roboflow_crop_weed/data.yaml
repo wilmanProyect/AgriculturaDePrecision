@@ -1,0 +1,14 @@
+path: C:\Users\VICTUS\Documents\Work\Agroptima\DESAROLLO SISTEMAS\AgriculturaDePrecision\data\images\roboflow_crop_weed
+train: train/images
+val: valid/images
+test: test/images
+
+nc: 2
+names: ['crop', 'weed']
+
+roboflow:
+  workspace: university-of-agriculture-faisalabad-fqroe
+  project: crop-weed-a50mu
+  version: 2
+  license: CC BY 4.0
+  url: https://universe.roboflow.com/university-of-agriculture-faisalabad-fqroe/crop-weed-a50mu/dataset/2

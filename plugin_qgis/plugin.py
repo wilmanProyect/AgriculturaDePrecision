@@ -4,12 +4,11 @@ QGIS Plugin para Agricultura de Precisión.
 """
 
 import os.path
-from PyQt5.QtCore import QSettings, QTranslator, QCoreApplication
-from PyQt5.QtGui import QIcon
-from PyQt5.QtWidgets import QAction
 
-# Importar la interfaz de diálogo
-from .dialog import PrecisionAgDialog
+from qgis.PyQt.QtCore import QCoreApplication
+from qgis.PyQt.QtGui import QIcon
+from qgis.PyQt.QtWidgets import QAction
+
 
 class PrecisionAgPlugin:
     """Clase principal del plugin de QGIS."""
@@ -54,7 +53,9 @@ class PrecisionAgPlugin:
 
     def run(self):
         """Ejecuta el diálogo del plugin."""
+        from .dialog import PrecisionAgDialog
+
         if not self.dlg:
-            self.dlg = PrecisionAgDialog()
+            self.dlg = PrecisionAgDialog(self.iface, parent=self.iface.mainWindow())
         self.dlg.show()
-        self.dlg.exec_()
+        self.dlg.exec()

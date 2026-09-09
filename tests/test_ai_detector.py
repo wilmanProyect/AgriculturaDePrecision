@@ -120,6 +120,73 @@ def test_predict_orthomosaic_offsets_tiles_and_georeferences(tiny_raster, monkey
     assert global_centers == [(2.0, 2.0), (2.0, 12.0), (12.0, 2.0), (12.0, 12.0)]
 
 
+def test_predict_orthomosaic_reports_progress(tiny_raster, monkeypatch):
+    detector = PlantDetector(weights_path="irrelevante.pt")
+    detector._model = MagicMock()
+    monkeypatch.setattr(detector, "predict", lambda image: [])
+
+    progress_calls = []
+
+    with RasterManager() as raster_manager:
+        raster_manager.open(tiny_raster)
+        detector.predict_orthomosaic(
+            raster_manager, tile_size=10, overlap=0.0,
+            progress_callback=lambda done, total: progress_calls.append((done, total))
+        )
+
+    assert progress_calls == [(1, 4), (2, 4), (3, 4), (4, 4)]
+
+
+def test_predict_orthomosaic_bounds_restricts_to_roi(tiny_raster, monkeypatch):
+    """Con `bounds`, solo se deben tilear los pixeles dentro de esa región, no todo el ráster."""
+    detector = PlantDetector(weights_path="irrelevante.pt")
+    detector._model = MagicMock()
+    monkeypatch.setattr(detector, "predict", lambda image: [])
+
+    call_count = {"n": 0}
+    original_predict = detector.predict
+
+    def counting_predict(image):
+        call_count["n"] += 1
+        return original_predict(image)
+
+    monkeypatch.setattr(detector, "predict", counting_predict)
+
+    with RasterManager() as raster_manager:
+        raster_manager.open(tiny_raster)
+        # Raster completo de 20x20 -> normalmente 4 tiles de 10x10.
+        # bounds cubre solo el cuadrante superior izquierdo -> debe procesar solo 1 tile.
+        detector.predict_orthomosaic(
+            raster_manager, tile_size=10, overlap=0.0,
+            bounds=(-4.0, 40.4, -3.9, 40.5)
+        )
+
+    assert call_count["n"] == 1
+
+
+def test_predict_orthomosaic_should_stop_cancels_early(tiny_raster, monkeypatch):
+    detector = PlantDetector(weights_path="irrelevante.pt")
+    detector._model = MagicMock()
+
+    call_count = {"n": 0}
+
+    def fake_predict(image):
+        call_count["n"] += 1
+        return []
+
+    monkeypatch.setattr(detector, "predict", fake_predict)
+
+    with RasterManager() as raster_manager:
+        raster_manager.open(tiny_raster)
+        # 4 tiles en total; cancelar tras el primero procesado.
+        detector.predict_orthomosaic(
+            raster_manager, tile_size=10, overlap=0.0,
+            should_stop=lambda: call_count["n"] >= 1
+        )
+
+    assert call_count["n"] == 1
+
+
 def test_predict_orthomosaic_requires_open_raster():
     detector = PlantDetector(weights_path="irrelevante.pt")
     detector._model = MagicMock()
