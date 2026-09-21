@@ -1,0 +1,7 @@
+Resultado preliminar de deteccion de surcos dentro de Poligono2.
+Capas finales: lineas_siembra.gpkg (150 lineas: 120 principales y 30 de cabecera); posibles_fallas_revisadas.gpkg (617 tramos >= 1 metro).
+CRS: EPSG:32720. Longitudes en metros.
+Origen: C:/Users/VICTUS/Downloads/result.tif; C:/Users/VICTUS/Documents/Poligono2.shp.
+Metodo: RGB a 5 cm, exceso de verde normalizado, deteccion de crestas y seguimiento local. Separacion mediana estimada 0.45 m. Los sectores principal y cabecera se delimitaron visualmente; se excluyeron transicion y camino.
+Los tramos rojos indican baja vegetacion RGB (umbral ExG 0.065), no fallas de siembra confirmadas ni conteo de plantas ausentes. Revisar alineacion local, malezas, sombras y vegetacion densa.
+La primera version posibles_fallas.gpkg y la imagen verificacion.png son anteriores al filtro final de longitud geometrica. Usar posibles_fallas_revisadas.gpkg.

@@ -1,0 +1,25 @@
+{
+  "rows": 150,
+  "gaps": 617,
+  "row_length_m": 14512.11856743873,
+  "gap_length_m": 1237.4705466739065,
+  "diagnostics": [
+    {
+      "zone": "Principal",
+      "slope": 0.0020000000000001683,
+      "seed_count": 120,
+      "median_spacing_m": 0.45
+    },
+    {
+      "zone": "Cabecera",
+      "slope": 0.13200000000000028,
+      "seed_count": 32,
+      "median_spacing_m": 0.45
+    }
+  ],
+  "all_inside": true,
+  "gap_threshold_m": 1,
+  "vegetation_threshold_exg": 0.065,
+  "limitations": "RGB vegetation absence, not confirmed missing plants. Main and headland sectors separated visually; transition and road excluded. No individual plant counts.",
+  "minimum_gap_length_m": 1.0000016749835572
+}

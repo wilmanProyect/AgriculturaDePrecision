@@ -28,6 +28,13 @@ class TrainingConfig:
     name: str = "plant_detector"       # Nombre de la corrida (project/name/weights/best.pt)
     workers: int = 4                   # Procesos de carga de datos (en Windows, cada uno reimporta
                                         # torch/ultralytics al iniciar: para datasets chicos, usar 0-2)
+    degrees: float = 0.0                # Rotación aleatoria +-N° en cada época (0 = sin rotar).
+                                        # Súbelo (ej. 180) cuando el objeto a detectar puede aparecer
+                                        # en cualquier orientación en la imagen real (ej. líneas de
+                                        # siembra vistas desde el aire), para que el modelo no aprenda
+                                        # a asociar la clase con la orientación de las fotos de entrenamiento.
+    flipud: float = 0.0                 # Probabilidad de espejado vertical (0-1); complementa `degrees`
+                                        # para la misma invarianza de orientación.
 
 
 class YOLOTrainer:
@@ -62,7 +69,9 @@ class YOLOTrainer:
                 # ruta absoluta evita esa sorpresa y respeta el `project` indicado.
                 project=os.path.abspath(self.config.project),
                 name=self.config.name,
-                workers=self.config.workers
+                workers=self.config.workers,
+                degrees=self.config.degrees,
+                flipud=self.config.flipud
             )
             logger.info(f"Entrenamiento finalizado. Resultados en: {self.config.project}/{self.config.name}")
             return results

@@ -3,3 +3,11 @@
 venv/
 .conda_env/
 __pypackages__/
+
+# Datasets, pesos y salidas de entrenamiento (binarios pesados, no van a git)
+data/images/*
+data/models/*
+data/outputs/*
+weights/
+*.pt
+*.onnx

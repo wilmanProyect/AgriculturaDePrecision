@@ -14,6 +14,26 @@ from core.analysis.vegetation_index import VegetationIndexCalculator, DEFAULT_ND
 from core.exceptions import RasterNotFoundError
 
 
+def _write_rgb_raster(path, width=20, height=20):
+    transform = from_origin(0, height, 1, 1)
+    red = np.full((height, width), 120, dtype=np.uint8)
+    green = np.full((height, width), 60, dtype=np.uint8)
+    blue = np.full((height, width), 60, dtype=np.uint8)
+    # Mitad izquierda: mucho más verde que rojo/azul -> vegetación vigorosa
+    green[:, : width // 2] = 180
+    red[:, : width // 2] = 60
+    blue[:, : width // 2] = 40
+
+    with rasterio.open(
+        str(path), "w", driver="GTiff",
+        height=height, width=width, count=3, dtype="uint8",
+        crs="EPSG:32630", transform=transform
+    ) as dst:
+        dst.write(red, 1)
+        dst.write(green, 2)
+        dst.write(blue, 3)
+
+
 def test_compute_ndvi_known_values():
     nir = np.array([[0.5]])
     red = np.array([[0.1]])
@@ -114,3 +134,58 @@ def test_zonal_statistics_reprojects_parcels_to_raster_crs(tmp_path):
 
     assert result.iloc[0]["ndvi_mean"] == pytest.approx(0.5, abs=1e-3)
     assert result.crs.to_string() == "EPSG:32630"
+
+
+def test_compute_exg_known_values():
+    red = np.array([[60.0]])
+    green = np.array([[180.0]])
+    blue = np.array([[40.0]])
+    total = 60.0 + 180.0 + 40.0
+    r, g, b = 60.0 / total, 180.0 / total, 40.0 / total
+    exg = VegetationIndexCalculator.compute_exg(red, green, blue)
+    assert exg[0, 0] == pytest.approx(2 * g - r - b)
+
+
+def test_compute_vari_known_values():
+    red = np.array([[60.0]])
+    green = np.array([[180.0]])
+    blue = np.array([[40.0]])
+    vari = VegetationIndexCalculator.compute_vari(red, green, blue)
+    assert vari[0, 0] == pytest.approx((180.0 - 60.0) / (180.0 + 60.0 - 40.0))
+
+
+@pytest.mark.parametrize("index", ["exg", "vari"])
+def test_zonal_statistics_rgb_index_classifies_vegetation_vs_soil(tmp_path, index):
+    raster_path = tmp_path / "rgb.tif"
+    _write_rgb_raster(raster_path)
+
+    parcelas = gpd.GeoDataFrame(
+        {"name": ["Parcela Vegetacion", "Parcela Suelo"]},
+        geometry=[box(0, 0, 10, 20), box(10, 0, 20, 20)],
+        crs="EPSG:32630"
+    )
+
+    result = VegetationIndexCalculator.zonal_statistics_rgb_index(
+        str(raster_path), parcelas, index=index
+    )
+
+    vegetacion = result[result["name"] == "Parcela Vegetacion"].iloc[0]
+    suelo = result[result["name"] == "Parcela Suelo"].iloc[0]
+
+    assert vegetacion[f"{index}_mean"] > suelo[f"{index}_mean"]
+    assert vegetacion[f"{index}_clase"] == "Vigorosa"
+    assert suelo[f"{index}_clase"] == "Suelo/Agua"
+
+
+def test_zonal_statistics_rgb_index_raises_when_raster_missing(tmp_path):
+    gdf = gpd.GeoDataFrame({"name": ["A"]}, geometry=[box(0, 0, 1, 1)], crs="EPSG:32630")
+    with pytest.raises(RasterNotFoundError):
+        VegetationIndexCalculator.zonal_statistics_rgb_index(str(tmp_path / "no_existe.tif"), gdf)
+
+
+def test_zonal_statistics_rgb_index_rejects_unknown_index(tmp_path):
+    raster_path = tmp_path / "rgb.tif"
+    _write_rgb_raster(raster_path)
+    gdf = gpd.GeoDataFrame({"name": ["A"]}, geometry=[box(0, 0, 1, 1)], crs="EPSG:32630")
+    with pytest.raises(ValueError):
+        VegetationIndexCalculator.zonal_statistics_rgb_index(str(raster_path), gdf, index="ndvi")

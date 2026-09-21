@@ -19,6 +19,7 @@ rasterstats  # Estadísticas zonales (índices de vegetación por parcela)
 
 # --- Análisis de Datos y Utilidades ---
 numpy
+scipy
 pandas
 scikit-learn
 matplotlib

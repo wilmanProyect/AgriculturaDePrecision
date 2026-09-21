@@ -15,10 +15,13 @@ from qgis.core import (
     QgsMapLayerProxyModel,
     QgsRendererCategory,
     QgsSymbol,
+    QgsProject,
+    QgsVectorLayer,
 )
 from qgis.gui import QgsFileWidget, QgsMapLayerComboBox
 from qgis.PyQt.QtGui import QColor
 from qgis.PyQt.QtWidgets import (
+    QCheckBox,
     QComboBox,
     QDialog,
     QDialogButtonBox,
@@ -27,6 +30,8 @@ from qgis.PyQt.QtWidgets import (
     QGroupBox,
     QHBoxLayout,
     QLabel,
+    QLineEdit,
+    QFileDialog,
     QMessageBox,
     QPlainTextEdit,
     QProgressBar,
@@ -38,7 +43,7 @@ from qgis.PyQt.QtWidgets import (
 )
 
 from .qgis_bridge import geodataframe_to_qgs_layer, layer_source_path
-from .worker import DetectionTask, VegetationIndexTask
+from .worker import DetectionTask, VegetationIndexTask, RowAnalysisTask
 
 # Colores por clase de densidad: Alta (buena cobertura) -> verde, Baja -> rojo
 _DENSITY_COLORS = {
@@ -70,6 +75,8 @@ class PrecisionAgDialog(QDialog):
         self._last_vegetation_result = None
         self._analysis_layer = None
         self._vegetation_layer = None
+        self._row_task = None
+        self._row_lines_defaults = {}
 
         self.setWindowTitle("Agricultura de Precisión")
         self.resize(600, 800)
@@ -155,19 +162,35 @@ class PrecisionAgDialog(QDialog):
         actions_layout.addWidget(self.cancel_btn)
         layout.addLayout(actions_layout)
 
-        veg_group = QGroupBox("Índice de Vegetación (NDVI / NDRE)")
+        self.rows_rgb_btn = QPushButton("Detectar líneas de siembra y posibles fallas (RGB, sin modelo)")
+        self.rows_rgb_btn.setToolTip("Heurística RGB (ExG + seguimiento de crestas). No requiere ningún modelo entrenado.")
+        self.rows_rgb_btn.clicked.connect(self.on_rows_rgb_clicked)
+        layout.addWidget(self.rows_rgb_btn)
+
+        self.rows_btn = QPushButton("Detectar líneas de siembra (avanzado: RGB o modelo YOLO)")
+        self.rows_btn.setToolTip("Igual que el anterior, pero permite indicar un modelo YOLO (segmentación o pose) entrenado.")
+        self.rows_btn.clicked.connect(self.on_rows_clicked)
+        layout.addWidget(self.rows_btn)
+
+        veg_group = QGroupBox("Índice de Vegetación (NDVI / NDRE / RGB)")
         vform = QFormLayout()
 
         self.veg_raster_combo = QgsMapLayerComboBox()
         self.veg_raster_combo.setFilters(QgsMapLayerProxyModel.Filter.RasterLayer)
-        vform.addRow("Ráster de índice:", self.veg_raster_combo)
+        vform.addRow("Ráster de índice / ortomosaico:", self.veg_raster_combo)
 
         self.veg_index_combo = QComboBox()
-        self.veg_index_combo.addItems(["ndvi", "ndre"])
+        self.veg_index_combo.addItems(["ndvi", "ndre", "exg", "vari"])
+        self.veg_index_combo.currentTextChanged.connect(self._update_veg_index_hint)
         vform.addRow("Tipo de índice:", self.veg_index_combo)
+
+        self.veg_index_hint = QLabel()
+        self.veg_index_hint.setWordWrap(True)
+        vform.addRow("", self.veg_index_hint)
 
         veg_group.setLayout(vform)
         layout.addWidget(veg_group)
+        self._update_veg_index_hint(self.veg_index_combo.currentText())
 
         veg_actions_layout = QHBoxLayout()
         self.veg_calc_btn = QPushButton("Calcular Índice de Vegetación")
@@ -231,11 +254,32 @@ class PrecisionAgDialog(QDialog):
             inference_cfg = ai_cfg.get("inference", {})
             self.tile_spin.setValue(int(inference_cfg.get("tile_size", 1024)))
             self.overlap_spin.setValue(float(inference_cfg.get("overlap", 0.2)))
+
+            row_lines_cfg = ai_cfg.get("row_lines", {})
+            row_weights = row_lines_cfg.get("weights_path")
+            if row_weights:
+                candidate = row_weights if os.path.isabs(row_weights) else os.path.join(project_root, row_weights)
+                if os.path.exists(candidate):
+                    self._row_lines_defaults["weights_path"] = candidate
+            if "conf_threshold" in row_lines_cfg:
+                self._row_lines_defaults["conf_threshold"] = float(row_lines_cfg["conf_threshold"])
         except Exception as e:
             self._log(f"No se pudo cargar config/default.yaml ({e}). Usando valores por defecto.")
 
     def _log(self, message: str) -> None:
         self.log_output.appendPlainText(message)
+
+    def _update_veg_index_hint(self, index_type: str) -> None:
+        if index_type in ("exg", "vari"):
+            self.veg_index_hint.setText(
+                "Se calcula al vuelo desde las bandas R/G/B: selecciona el propio "
+                "ortomosaico RGB (no necesitas un ráster de índice aparte)."
+            )
+        else:
+            self.veg_index_hint.setText(
+                "Requiere un ráster de índice ya generado a partir de un vuelo con "
+                "sensor NIR/RedEdge (ej. exportado por el software de fotogrametría)."
+            )
 
     # ------------------------------------------------------------ Detección
 
@@ -294,10 +338,16 @@ class PrecisionAgDialog(QDialog):
 
     def _set_running(self, running: bool) -> None:
         self.detect_btn.setEnabled(not running)
+        self.rows_btn.setEnabled(not running and self._veg_task is None)
+        self.rows_rgb_btn.setEnabled(not running and self._veg_task is None)
         self.cancel_btn.setEnabled(running)
         self.progress_bar.setValue(0)
 
     def on_cancel_clicked(self) -> None:
+        if self._row_task is not None:
+            self._row_task.cancel()
+            self._log("Cancelando análisis de surcos...")
+            return
         if self._task is not None:
             self._task.cancel()
             self._log("Cancelando detección...")
@@ -363,6 +413,9 @@ class PrecisionAgDialog(QDialog):
 
         renderer = QgsCategorizedSymbolRenderer(column, categories)
         layer.setRenderer(renderer)
+        # Semitransparente: son polígonos duplicados de la capa de parcelas de entrada,
+        # dibujados encima de ella; a opacidad completa tapan el ortomosaico por debajo.
+        layer.setOpacity(0.55)
         layer.triggerRepaint()
 
     def on_paint_clicked(self) -> None:
@@ -375,6 +428,207 @@ class PrecisionAgDialog(QDialog):
 
     # ------------------------------------------------ Índice de vegetación
 
+    def on_rows_clicked(self) -> None:
+        self._run_row_analysis(include_yolo=True)
+
+    def on_rows_rgb_clicked(self) -> None:
+        self._run_row_analysis(include_yolo=False)
+
+    def _run_row_analysis(self, include_yolo: bool) -> None:
+        if self._task is not None or self._veg_task is not None or self._row_task is not None:
+            return
+        raster = self.raster_combo.currentLayer()
+        parcels = self.parcels_combo.currentLayer()
+        path = layer_source_path(raster)
+        if not path or parcels is None:
+            QMessageBox.warning(self, "Faltan entradas", "Selecciona un ortomosaico RGB de archivo y una capa de parcelas.")
+            return
+        try:
+            from .qgis_bridge import qgs_vector_layer_to_geodataframe
+            from core.analysis.row_detection import RowOptions
+            gdf = qgs_vector_layer_to_geodataframe(parcels)
+            if gdf.empty or gdf.crs is None:
+                raise ValueError("Las parcelas deben tener geometría y CRS definidos.")
+            # Reproyectar a un CRS métrico ACÁ, en el hilo principal: calcular
+            # estimate_utm_crs()/to_crs() por primera vez desde el hilo en segundo
+            # plano de la tarea puede colgar QGIS con un crash nativo de PROJ.
+            row_crs = gdf.estimate_utm_crs()
+            if row_crs is None:
+                raise ValueError("No se pudo determinar un CRS métrico para las parcelas.")
+            gdf = gdf.to_crs(row_crs)
+        except Exception as exc:
+            QMessageBox.warning(self, "No se puede analizar", str(exc))
+            return
+
+        settings = QDialog(self)
+        settings.setWindowTitle("Líneas de siembra y posibles fallas")
+        form = QFormLayout(settings)
+        if include_yolo:
+            hint_text = ("Surcos en celeste y tramos no sembrados en rojo. Sin modelo YOLO usa una "
+                        "heurística RGB (vegetación); con modelo YOLO (segmentación o pose), cada "
+                        "línea es una instancia que localiza el modelo, y los huecos entre "
+                        "detecciones de una misma fila también se reportan como posible falla. En "
+                        "ambos casos revisa las cabeceras y los resultados: no confirma plantas "
+                        "faltantes ni surcos completamente omitidos.")
+        else:
+            hint_text = ("Surcos en celeste y tramos no sembrados en rojo. Heurística RGB (ExG + "
+                        "seguimiento de crestas), no requiere ningún modelo entrenado. Revisa las "
+                        "cabeceras y los resultados: no confirma plantas faltantes ni surcos "
+                        "completamente omitidos.")
+        hint = QLabel(hint_text)
+        hint.setWordWrap(True)
+        form.addRow(hint)
+
+        weights_widget = None
+        conf_spin = None
+        if include_yolo:
+            weights_widget = QgsFileWidget()
+            weights_widget.setFilter("Modelos YOLO (*.pt)")
+            row_lines_defaults = self._row_lines_defaults
+            if row_lines_defaults.get("weights_path"):
+                weights_widget.setFilePath(row_lines_defaults["weights_path"])
+            form.addRow("Modelo YOLO (.pt, segmentación o pose) — opcional:", weights_widget)
+
+            conf_spin = QDoubleSpinBox()
+            conf_spin.setRange(0.01, 1.0)
+            conf_spin.setSingleStep(0.05)
+            conf_spin.setValue(row_lines_defaults.get("conf_threshold", 0.25))
+            form.addRow("Confianza mínima (solo YOLO):", conf_spin)
+
+        resolution_auto = QCheckBox("Detectar automáticamente (recomendado)")
+        resolution_auto.setChecked(True)
+        resolution_spin = QDoubleSpinBox()
+        resolution_spin.setDecimals(3)
+        resolution_spin.setRange(.01, .5)
+        resolution_spin.setSingleStep(.01)
+        resolution_spin.setValue(.05)
+        resolution_spin.setEnabled(False)
+        resolution_auto.toggled.connect(lambda checked: resolution_spin.setEnabled(not checked))
+        resolution_row = QHBoxLayout()
+        resolution_row.addWidget(resolution_auto)
+        resolution_row.addWidget(resolution_spin)
+        resolution_hint = QLabel("Usa el detalle real del ortomosaico sin superar el límite de memoria por "
+                                 "parcela; desmarcá para fijar un valor manual.")
+        resolution_hint.setWordWrap(True)
+        form.addRow("Resolución de análisis (m/píxel):", resolution_row)
+        form.addRow("", resolution_hint)
+
+        controls = {}
+        for key, label, minimum, maximum, default, step in [
+            ('spacing_m', 'Separación aproximada entre surcos (m):', .15, 10., .45, .05),
+            ('min_gap_m', 'Longitud mínima de falla (m):', .1, 100., 1., .1),
+            ('vegetation_threshold', 'Umbral de vegetación (mayor = más fallas) — solo heurística RGB:', -.2, .8, .065, .005),
+        ]:
+            control = QDoubleSpinBox()
+            control.setDecimals(3)
+            control.setRange(minimum, maximum)
+            control.setSingleStep(step)
+            control.setValue(default)
+            form.addRow(label, control)
+            controls[key] = control
+        output = QLineEdit(os.path.join(os.path.expanduser('~'), 'Documents', 'Agroptima', 'AnalisisSiembra'))
+        browse = QPushButton("Elegir carpeta")
+        def choose_folder():
+            folder = QFileDialog.getExistingDirectory(settings, "Guardar resultados", output.text())
+            if folder:
+                output.setText(folder)
+        browse.clicked.connect(choose_folder)
+        form.addRow("Carpeta de resultados:", output)
+        form.addRow(browse)
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+        buttons.accepted.connect(settings.accept)
+        buttons.rejected.connect(settings.reject)
+        form.addRow(buttons)
+        if not settings.exec():
+            return
+        weights_path = ""
+        conf_value = 0.25
+        if include_yolo:
+            weights_path = weights_widget.filePath().strip()
+            if weights_path and not os.path.exists(weights_path):
+                QMessageBox.warning(self, "Modelo no encontrado", "El archivo de pesos YOLO-seg indicado no existe.")
+                return
+            conf_value = conf_spin.value()
+        try:
+            resolution_m = None if resolution_auto.isChecked() else resolution_spin.value()
+            options = RowOptions(resolution_m=resolution_m,
+                                  **{key: value.value() for key, value in controls.items()})
+            options.validate()
+            if not output.text().strip():
+                raise ValueError("Indica una carpeta para guardar resultados.")
+        except ValueError as exc:
+            QMessageBox.warning(self, "Parámetros inválidos", str(exc))
+            return
+        self._row_task = RowAnalysisTask(dict(raster_path=path, parcelas_gdf=gdf, options=options,
+                                              output_dir=output.text().strip(), weights_path=weights_path,
+                                              conf_threshold=conf_value, crs=row_crs))
+        self.rows_btn.setEnabled(False)
+        self.rows_rgb_btn.setEnabled(False)
+        self.detect_btn.setEnabled(False)
+        self.veg_calc_btn.setEnabled(False)
+        self.cancel_btn.setEnabled(True)
+        self.progress_bar.setValue(0)
+        self._row_task.progressChanged.connect(lambda value: self.progress_bar.setValue(int(value)))
+        self._row_task.taskCompleted.connect(self._on_rows_completed)
+        self._row_task.taskTerminated.connect(self._on_rows_terminated)
+        if weights_path:
+            self._log("Segmentando líneas de siembra con el modelo YOLO indicado...")
+        else:
+            self._log("Analizando surcos y cabeceras (heurística RGB); los tramos rojos serán posibles fallas.")
+        QgsApplication.taskManager().addTask(self._row_task)
+
+    def _finish_rows(self):
+        self._row_task = None
+        self.rows_btn.setEnabled(True)
+        self.rows_rgb_btn.setEnabled(True)
+        self.detect_btn.setEnabled(True)
+        self.veg_calc_btn.setEnabled(True)
+        self.cancel_btn.setEnabled(False)
+
+    def _on_rows_completed(self):
+        result = self._row_task.result
+        self._finish_rows()
+        suffix = "YOLO" if result.get('model_weights') else "RGB"
+        try:
+            for key, name, color, width in [
+                ('rows_gdf', f'Líneas de siembra - {suffix}', '#00dce8', .18),
+                ('gaps_gdf', 'Posibles fallas de siembra', '#ff2525', .55),
+            ]:
+                if key not in result['paths']:
+                    continue
+                layer = QgsVectorLayer(result['paths'][key], name, 'ogr')
+                if not layer.isValid():
+                    raise ValueError(f"No se pudo cargar {name}.")
+                symbol = layer.renderer().symbol()
+                symbol.setColor(QColor(color))
+                symbol.setWidth(width)
+                metadata = layer.metadata()
+                metadata.setAbstract(result['note'])
+                layer.setMetadata(metadata)
+                QgsProject.instance().addMapLayer(layer)
+                layer.saveNamedStyle(os.path.splitext(result['paths'][key])[0] + '.qml')
+                layer.triggerRepaint()
+            self.iface.mapCanvas().refresh()
+            self.progress_bar.setValue(100)
+            resolution_used = result.get('options', {}).get('resolution_m')
+            resolution_note = f" (resolución usada: {resolution_used:.3f} m/px)" if resolution_used else ""
+            self._log(
+                f"Resultado: {result['rows']} línea(s) sembrada(s) ({result['row_length_m']:.1f} m) y "
+                f"{result['gaps']} posible(s) falla(s) ({result['gap_length_m']:.1f} m){resolution_note}. "
+                f"Guardado en {result['folder']}"
+            )
+            for warning in result['warnings']:
+                self._log(warning)
+        except Exception as exc:
+            QMessageBox.critical(self, "Error al cargar resultados", f"{exc}\nArchivos guardados en {result['folder']}")
+
+    def _on_rows_terminated(self):
+        error = self._row_task.error if self._row_task else None
+        self._finish_rows()
+        self._log(f"Error al analizar surcos: {error}" if error else "Análisis de surcos cancelado.")
+        if error:
+            QMessageBox.critical(self, "Análisis de surcos", str(error))
+
     def on_vegetation_clicked(self) -> None:
         raster_layer = self.veg_raster_combo.currentLayer()
         parcels_layer = self.parcels_combo.currentLayer()
@@ -382,7 +636,8 @@ class PrecisionAgDialog(QDialog):
         if raster_layer is None or parcels_layer is None:
             QMessageBox.warning(
                 self, "Faltan capas",
-                "Selecciona un ráster de índice (NDVI/NDRE) y una capa de parcelas."
+                "Selecciona un ráster de índice (o el ortomosaico RGB, según el tipo) "
+                "y una capa de parcelas."
             )
             return
 
@@ -390,7 +645,7 @@ class PrecisionAgDialog(QDialog):
         if not raster_path:
             QMessageBox.warning(
                 self, "Ráster no válido",
-                "No se pudo resolver la ruta del archivo del ráster de índice "
+                "No se pudo resolver la ruta del archivo del ráster seleccionado "
                 "(debe ser una capa respaldada por un archivo, ej. GeoTIFF)."
             )
             return
@@ -409,6 +664,8 @@ class PrecisionAgDialog(QDialog):
         self._log(f"Calculando {prefix.upper()} por parcela...")
 
         self._veg_task = VegetationIndexTask(params)
+        self.rows_btn.setEnabled(False)
+        self.rows_rgb_btn.setEnabled(False)
         self._veg_task.taskCompleted.connect(self._on_vegetation_completed)
         self._veg_task.taskTerminated.connect(self._on_vegetation_terminated)
         QgsApplication.taskManager().addTask(self._veg_task)
@@ -417,6 +674,9 @@ class PrecisionAgDialog(QDialog):
         self.veg_calc_btn.setEnabled(True)
         result = self._veg_task.result
         self._veg_task = None
+
+        self.rows_btn.setEnabled(self._task is None and self._row_task is None)
+        self.rows_rgb_btn.setEnabled(self._task is None and self._row_task is None)
 
         self._last_vegetation_result = result
         prefix = result["prefix"]
@@ -437,6 +697,8 @@ class PrecisionAgDialog(QDialog):
         self.veg_calc_btn.setEnabled(True)
         error = self._veg_task.error if self._veg_task is not None else None
         self._veg_task = None
+        self.rows_btn.setEnabled(self._task is None and self._row_task is None)
+        self.rows_rgb_btn.setEnabled(self._task is None and self._row_task is None)
 
         if error is not None:
             self._log(f"Error: {error}")

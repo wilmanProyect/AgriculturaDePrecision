@@ -17,7 +17,7 @@ from core.exceptions import InvalidDatasetError, TrainingError
 def _config(data_yaml: str) -> TrainingConfig:
     return TrainingConfig(
         data_yaml=data_yaml,
-        model_arch="yolo11n.pt",
+        model_arch="yolo11m.pt",
         epochs=5,
         imgsz=320,
         batch=4,
@@ -43,12 +43,30 @@ def test_train_calls_ultralytics_with_expected_params(tmp_path):
     with patch("ultralytics.YOLO", return_value=mock_model_instance) as mock_yolo:
         trainer.train()
 
-    mock_yolo.assert_called_once_with("yolo11n.pt")
+    mock_yolo.assert_called_once_with("yolo11m.pt")
     mock_model_instance.train.assert_called_once_with(
         data=str(data_yaml), epochs=5, imgsz=320, batch=4,
         device="cpu", patience=50, project=os.path.abspath("data/models"), name="test_run",
-        workers=4
+        workers=4, degrees=0.0, flipud=0.0
     )
+
+
+def test_train_propagates_rotation_augmentation(tmp_path):
+    data_yaml = tmp_path / "data.yaml"
+    data_yaml.write_text("path: .\n", encoding="utf-8")
+
+    config = _config(str(data_yaml))
+    config.degrees = 180.0
+    config.flipud = 0.5
+    trainer = YOLOTrainer(config)
+
+    mock_model_instance = MagicMock()
+    with patch("ultralytics.YOLO", return_value=mock_model_instance):
+        trainer.train()
+
+    _, kwargs = mock_model_instance.train.call_args
+    assert kwargs["degrees"] == 180.0
+    assert kwargs["flipud"] == 0.5
 
 
 def test_train_wraps_ultralytics_failures_in_training_error(tmp_path):

@@ -1,0 +1,18 @@
+[general]
+name=Agricultura de Precision
+qgisMinimumVersion=3.28
+qgisMaximumVersion=4.99
+description=Deteccion de plantas con YOLO11, conteo por parcela, calculo de densidad y coloreado automatico sobre ortomosaicos.
+version=0.1.0
+author=Agroptima
+email=tecnicogandarillas@gmail.com
+about=Integra el Motor GIS y el Motor IA (YOLO11 / Ultralytics) del proyecto AgriculturaDePrecision dentro de QGIS: detecta plantas sobre un ortomosaico, las cuenta por parcela, calcula densidad y colorea las parcelas automaticamente segun su clase de densidad.
+tracker=
+repository=
+category=Analysis
+tags=agriculture,precision agriculture,yolo,yolo11,ai,deep learning,plants,detection,orthomosaic
+homepage=
+icon=icons/logo.png
+experimental=False
+deprecated=False
+server=False

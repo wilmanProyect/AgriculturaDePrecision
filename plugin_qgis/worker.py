@@ -12,13 +12,86 @@ from qgis.core import QgsTask
 from ai.inference.detector import PlantDetector
 from ai.utils.georeferencing import detections_to_geodataframe
 from core.analysis.spatial_analysis import SpatialAnalysis
-from core.analysis.vegetation_index import VegetationIndexCalculator
+from core.analysis.vegetation_index import RGB_ONLY_INDICES, VegetationIndexCalculator
 from core.geometry.geometry_manager import GeometryManager
 from core.geometry.geometry_validator import GeometryValidator
 from core.gis.raster.raster_manager import RasterManager
 from core.logger import get_logger
 
 logger = get_logger(__name__)
+
+
+class RowAnalysisTask(QgsTask):
+    """Analiza surcos fuera del hilo de QGIS y persiste sus resultados."""
+
+    def __init__(self, params: dict):
+        super().__init__("Detectar líneas de siembra y fallas", QgsTask.Flag.CanCancel)
+        self.params = params
+        self.result = None
+        self.error = None
+
+    def run(self) -> bool:
+        from core.analysis.row_detection import RowDetector, RowAnalysisCanceled
+        try:
+            import json
+            from dataclasses import asdict
+            from datetime import datetime
+            from pathlib import Path
+            from uuid import uuid4
+
+            # `crs`, si se pasó, ya fue resuelto en el hilo principal (ver dialog.py):
+            # calcular GeoDataFrame.estimate_utm_crs()/to_crs() por primera vez desde
+            # este hilo en segundo plano puede colgar el proceso con un crash nativo
+            # de PROJ (access violation) en algunos entornos de QGIS.
+            crs = self.params.get('crs')
+            weights_path = self.params.get('weights_path')
+            if weights_path:
+                from ai.inference.row_segmenter import RowModelOptions, RowSegmenter
+                segmenter = RowSegmenter(RowModelOptions(
+                    weights_path=weights_path,
+                    conf_threshold=self.params.get('conf_threshold', 0.25)
+                ))
+                segmenter.load_model()
+                result = segmenter.analyze(
+                    self.params['raster_path'], self.params['parcelas_gdf'], self.params['options'],
+                    progress=lambda value: self.setProgress(value * .9), should_stop=self.isCanceled, crs=crs)
+            else:
+                result = RowDetector(self.params['options']).analyze(
+                    self.params['raster_path'], self.params['parcelas_gdf'],
+                    progress=lambda value: self.setProgress(value * .9), should_stop=self.isCanceled, crs=crs)
+            if self.isCanceled():
+                return False
+            folder = Path(self.params['output_dir']) / (datetime.now().strftime('%Y%m%d_%H%M%S') + '_' + uuid4().hex[:6])
+            folder.mkdir(parents=True, exist_ok=False)
+            paths = {}
+            for key, filename in [('rows_gdf', 'lineas_siembra'), ('gaps_gdf', 'posibles_fallas')]:
+                path = folder / (filename + '.gpkg')
+                # Empty results are reported explicitly; never create a misleading point layer.
+                if not result[key].empty:
+                    result[key].to_file(path, layer=filename, driver='GPKG')
+                    paths[key] = str(path)
+            note = ('Segmentado por el modelo YOLO indicado; revisa su desempeño real antes de '
+                    'usar los metros como cifra definitiva.' if weights_path else
+                    'Baja vegetación RGB; no confirma falla ni identifica surcos completamente ausentes.')
+            summary = {
+                'method': result['method'], 'options': asdict(result['options']),
+                'model_weights': weights_path or None,
+                'raster': self.params['raster_path'], 'crs': str(result['rows_gdf'].crs),
+                'rows': len(result['rows_gdf']), 'gaps': len(result['gaps_gdf']),
+                'row_length_m': float(result['rows_gdf'].length.sum()),
+                'gap_length_m': float(result['gaps_gdf'].length.sum()),
+                'warnings': result['warnings'],
+                'note': note}
+            (folder / 'resumen.json').write_text(json.dumps(summary, indent=2, ensure_ascii=False), encoding='utf-8')
+            self.result = {'paths': paths, 'folder': str(folder), **summary}
+            self.setProgress(100)
+            return not self.isCanceled()
+        except RowAnalysisCanceled:
+            return False
+        except Exception as exc:
+            logger.exception("Falló el análisis de surcos")
+            self.error = exc
+            return False
 
 
 class DetectionTask(QgsTask):
@@ -131,9 +204,12 @@ class DetectionTask(QgsTask):
 
 class VegetationIndexTask(QgsTask):
     """
-    Calcula estadísticas zonales de un índice de vegetación (NDVI/NDRE) ya
-    generado (ej. por el software de fotogrametría) para cada parcela, fuera
-    del hilo principal de QGIS.
+    Calcula estadísticas zonales de un índice de vegetación para cada parcela,
+    fuera del hilo principal de QGIS. Soporta dos flujos:
+    - NDVI/NDRE: requieren un ráster de índice ya generado (ej. por el software
+      de fotogrametría a partir de un vuelo con sensor NIR/RedEdge).
+    - ExG/VARI: se calculan al vuelo a partir de las bandas RGB del propio
+      ortomosaico, sin necesitar NIR/RedEdge.
     """
 
     def __init__(self, params: dict):
@@ -153,10 +229,21 @@ class VegetationIndexTask(QgsTask):
 
     def _run_zonal_stats(self) -> dict:
         p = self.params
-        parcelas_result = VegetationIndexCalculator.zonal_statistics(
-            raster_path=p["raster_path"],
-            parcelas_gdf=p["parcelas_gdf"],
-            thresholds=p.get("thresholds"),
-            stat_column_prefix=p["prefix"]
-        )
-        return {"parcelas_gdf": parcelas_result, "prefix": p["prefix"]}
+        prefix = p["prefix"]
+
+        if prefix in RGB_ONLY_INDICES:
+            parcelas_result = VegetationIndexCalculator.zonal_statistics_rgb_index(
+                raster_path=p["raster_path"],
+                parcelas_gdf=p["parcelas_gdf"],
+                index=prefix,
+                thresholds=p.get("thresholds"),
+                stat_column_prefix=prefix
+            )
+        else:
+            parcelas_result = VegetationIndexCalculator.zonal_statistics(
+                raster_path=p["raster_path"],
+                parcelas_gdf=p["parcelas_gdf"],
+                thresholds=p.get("thresholds"),
+                stat_column_prefix=prefix
+            )
+        return {"parcelas_gdf": parcelas_result, "prefix": prefix}

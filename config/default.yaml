@@ -3,16 +3,22 @@
 ai:
   model:
     architecture: yolo11m.pt          # Checkpoint base: yolo11n/s/m/l/x.pt
-    weights_path: data/models/plant_detector/weights/best.pt
+    weights_path: data/models/weeding_detection/weights/best.pt
     device: cuda                      # 'cuda' si hay GPU NVIDIA disponible, si no 'cpu'
     imgsz: 640
     conf_threshold: 0.25
     iou_threshold: 0.45
 
   classes:
-    0: planta
-    1: arbol
-    2: espacio_vacio
+    0: Plant
+
+  row_lines:
+    # Vacío a propósito: row_lines_pose-2 (YOLO11m-pose, dataset "Crop-row") no generaliza
+    # sobre ortomosaico real (ver docs/BITACORA.md) y no conviene precargarlo como default.
+    # Completar cuando haya un modelo YOLO-seg entrenado con imágenes aéreas propias.
+    weights_path: ""
+    conf_threshold: 0.25
+    imgsz: 640
 
   training:
     dataset_dir: data/images
