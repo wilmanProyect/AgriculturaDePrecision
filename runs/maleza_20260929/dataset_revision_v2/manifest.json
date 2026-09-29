@@ -1,0 +1,155 @@
+[
+  {
+    "image": "maleza_01.png",
+    "mask": "maleza_01_mask.png",
+    "user_id": 1,
+    "class": 1,
+    "class_name": "maleza",
+    "crs": "EPSG:32720",
+    "transform": [
+      0.025,
+      0.0,
+      432562.9573061556,
+      0.0,
+      -0.025,
+      8197026.860708156
+    ],
+    "source": "maleza: anotacion del usuario"
+  },
+  {
+    "image": "maleza_02.png",
+    "mask": "maleza_02_mask.png",
+    "user_id": 2,
+    "class": 1,
+    "class_name": "maleza",
+    "crs": "EPSG:32720",
+    "transform": [
+      0.025,
+      0.0,
+      432655.1387055,
+      0.0,
+      -0.025,
+      8197023.809769382
+    ],
+    "source": "maleza: anotacion del usuario"
+  },
+  {
+    "image": "maleza_03.png",
+    "mask": "maleza_03_mask.png",
+    "user_id": 3,
+    "class": 1,
+    "class_name": "maleza",
+    "crs": "EPSG:32720",
+    "transform": [
+      0.025,
+      0.0,
+      432654.4909485841,
+      0.0,
+      -0.025,
+      8197022.317463194
+    ],
+    "source": "maleza: anotacion del usuario"
+  },
+  {
+    "image": "maleza_04.png",
+    "mask": "maleza_04_mask.png",
+    "user_id": 4,
+    "class": 1,
+    "class_name": "maleza",
+    "crs": "EPSG:32720",
+    "transform": [
+      0.025,
+      0.0,
+      432653.68721117364,
+      0.0,
+      -0.025,
+      8197021.598457628
+    ],
+    "source": "maleza: anotacion del usuario"
+  },
+  {
+    "image": "maleza_05.png",
+    "mask": "maleza_05_mask.png",
+    "user_id": 5,
+    "class": 1,
+    "class_name": "maleza",
+    "crs": "EPSG:32720",
+    "transform": [
+      0.025,
+      0.0,
+      432651.6123289145,
+      0.0,
+      -0.025,
+      8197022.423341443
+    ],
+    "source": "maleza: anotacion del usuario"
+  },
+  {
+    "image": "maleza_06.png",
+    "mask": "maleza_06_mask.png",
+    "user_id": 6,
+    "class": 1,
+    "class_name": "maleza",
+    "crs": "EPSG:32720",
+    "transform": [
+      0.025,
+      0.0,
+      432655.92856924323,
+      0.0,
+      -0.025,
+      8197023.180250967
+    ],
+    "source": "maleza: anotacion del usuario"
+  },
+  {
+    "image": "maleza_07.png",
+    "mask": "maleza_07_mask.png",
+    "user_id": 7,
+    "class": 1,
+    "class_name": "maleza",
+    "crs": "EPSG:32720",
+    "transform": [
+      0.025,
+      0.0,
+      432656.2002836618,
+      0.0,
+      -0.025,
+      8197021.122553659
+    ],
+    "source": "maleza: anotacion del usuario"
+  },
+  {
+    "image": "maleza_08.png",
+    "mask": "maleza_08_mask.png",
+    "user_id": 8,
+    "class": 1,
+    "class_name": "maleza",
+    "crs": "EPSG:32720",
+    "transform": [
+      0.025,
+      0.0,
+      432655.4256153596,
+      0.0,
+      -0.025,
+      8197021.553801124
+    ],
+    "source": "maleza: anotacion del usuario"
+  },
+  {
+    "image": "maleza_09.png",
+    "mask": "maleza_09_mask.png",
+    "user_id": 9,
+    "class": 1,
+    "class_name": "maleza",
+    "crs": "EPSG:32720",
+    "transform": [
+      0.025,
+      0.0,
+      432647.1938771375,
+      0.0,
+      -0.025,
+      8197020.480864525
+    ],
+    "source": "maleza: anotacion del usuario"
+  }
+]

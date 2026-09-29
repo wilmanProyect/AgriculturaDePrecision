@@ -1,0 +1,18 @@
+{
+  "parcel_area_m2": 52865.75277288163,
+  "candidate_patches": 264,
+  "flagged_vegetation_m2": 15.917500002881779,
+  "evaluated_interrow_m2": 10434.945000000002,
+  "resolution_m": 0.05,
+  "method": "Vegetacion RGB fuera de ejes de surcos existentes; sin modelo entrenado",
+  "limitations": [
+    "No confirma maleza ni especie. Puede incluir hojas de soya y errores de los ejes.",
+    "No evalua maleza dentro del surco, dosel cerrado o zonas sin ejes cercanos.",
+    "El area marcada no representa la infestacion total del lote."
+  ],
+  "inputs": [
+    "C:/Users/VICTUS/Downloads/result.tif",
+    "C:/Users/VICTUS/Documents/poligono.shp",
+    "C:/Users/VICTUS/Documents/Agroptima/AnalisisSiembra/20260917_174940_d1a3b8/lineas_siembra.gpkg"
+  ]
+}

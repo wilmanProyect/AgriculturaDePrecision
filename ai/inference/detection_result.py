@@ -17,6 +17,7 @@ class Detection:
     bbox_pixel: Tuple[float, float, float, float]  # Bounding box (x1, y1, x2, y2) en píxeles del ortomosaico
     center_pixel: Tuple[float, float]          # Centro (col, row) en píxeles del ortomosaico
     center_geo: Optional[Tuple[float, float]] = None  # Centro (x, y) georreferenciado en el CRS del ráster
+    bbox_geo: Optional[Tuple[Tuple[float, float], ...]] = None  # 4 esquinas (x, y) del bbox, georreferenciadas
 
     def to_dict(self) -> dict:
         """Convierte la detección a un diccionario estándar."""

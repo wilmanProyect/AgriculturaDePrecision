@@ -1,0 +1,20 @@
+{
+  "method": "Existing V4 Random Forest, RGB and texture; threshold 0.98; min area 0.06 m2",
+  "boundary_area_m2": 2212.594193884025,
+  "candidates": 76,
+  "candidate_area_m2": 17.46999999500989,
+  "all_inside": true,
+  "all_valid": true,
+  "valid_raster_fraction": 1.0,
+  "samples_inside": {
+    "maleza": 0,
+    "soya": 1
+  },
+  "status": "REJECTED: zero overlap with all 14 newly labelled weed polygons",
+  "inputs": [
+    "crop.npz (orthomosaic RGB)",
+    "prueba_limite.json",
+    "supervisado_v4/clasificador.joblib"
+  ],
+  "evaluation_file": "evaluacion_malezas_2.json"
+}

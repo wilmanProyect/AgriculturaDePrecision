@@ -1,0 +1,5 @@
+Muestras confirmadas de maleza indicadas por el usuario.
+Mascara: 1=maleza, 255=sin etiquetar. El fondo NO es soya confirmada.
+Faltan ejemplos negativos de soya para evaluar falsos positivos.
+La resolucion de salida 0.025 m no agrega detalle al original (~0.0266 m).
+Separar validacion por grupos espaciales; no dividir pixeles contiguos al azar.

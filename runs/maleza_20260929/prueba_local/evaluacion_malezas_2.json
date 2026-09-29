@@ -1,0 +1,13 @@
+{
+  "marked_total": 14,
+  "marked_inside": 14,
+  "any_overlap": 0,
+  "at_least_half_covered": 0,
+  "completely_missed": 14,
+  "marked_area_m2": 21.52732674857965,
+  "covered_marked_area_m2": 0.0,
+  "marked_area_coverage_pct": 0.0,
+  "candidates_overlapping_marks": 0,
+  "candidate_count": 76,
+  "note": "Independent of these new labels: existing predictions frozen before labels. Polygon area coverage, not plant precision. Unlabelled areas are unknown, not negatives."
+}

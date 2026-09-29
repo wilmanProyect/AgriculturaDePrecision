@@ -43,7 +43,7 @@ from qgis.PyQt.QtWidgets import (
 )
 
 from .qgis_bridge import geodataframe_to_qgs_layer, layer_source_path
-from .worker import DetectionTask, VegetationIndexTask, RowAnalysisTask
+from .worker import DetectionTask, VegetationIndexTask, RowAnalysisTask, WeedAnalysisTask
 
 # Colores por clase de densidad: Alta (buena cobertura) -> verde, Baja -> rojo
 _DENSITY_COLORS = {
@@ -62,6 +62,14 @@ _VEGETATION_COLORS = {
     "Sin datos": QColor(189, 189, 189),
 }
 
+# Colores por clase de infestación de malezas: Baja -> verde, Alta -> rojo
+_INFESTATION_COLORS = {
+    "Baja": QColor(26, 152, 80),
+    "Media": QColor(255, 217, 47),
+    "Alta": QColor(215, 48, 39),
+    "Sin datos": QColor(189, 189, 189),
+}
+
 
 class PrecisionAgDialog(QDialog):
     """Diálogo principal: detección de plantas, conteo, densidad, índices de vegetación y coloreado de parcelas."""
@@ -77,9 +85,13 @@ class PrecisionAgDialog(QDialog):
         self._vegetation_layer = None
         self._row_task = None
         self._row_lines_defaults = {}
+        self._weed_task = None
+        self._last_weed_result = None
+        self._weed_layer = None
+        self._weed_defaults = {}
 
         self.setWindowTitle("Agricultura de Precisión")
-        self.resize(600, 800)
+        self.resize(600, 950)
 
         self._build_ui()
         self._load_defaults()
@@ -161,6 +173,57 @@ class PrecisionAgDialog(QDialog):
         self.cancel_btn.setEnabled(False)
         actions_layout.addWidget(self.cancel_btn)
         layout.addLayout(actions_layout)
+
+        weed_group = QGroupBox("Detección de Malezas (cultivo vs. maleza)")
+        wform = QFormLayout()
+
+        self.weed_weights_widget = QgsFileWidget()
+        self.weed_weights_widget.setFilter("Modelos YOLO (*.pt)")
+        wform.addRow("Pesos del modelo cultivo/maleza (.pt):", self.weed_weights_widget)
+
+        self.weed_conf_spin = QDoubleSpinBox()
+        self.weed_conf_spin.setRange(0.01, 1.0)
+        self.weed_conf_spin.setSingleStep(0.05)
+        self.weed_conf_spin.setValue(0.25)
+        wform.addRow("Confianza mínima:", self.weed_conf_spin)
+
+        weed_hint = QLabel(
+            "Dibuja un polígono (el recuadro de YOLO) alrededor de cada maleza detectada, "
+            "en rojo. Usa el ortomosaico y las parcelas de 'Entradas' y el device/IoU/tile/"
+            "solape de 'Parámetros de inferencia'. Requiere un modelo YOLO con clase 'weed' "
+            "(ideal: también 'crop', ej. dataset crop_weed) entrenado sobre parches del propio "
+            "ortomosaico. A 85-100 m de altura de vuelo la maleza ocupa pocos píxeles: "
+            "conviene un tile pequeño (512-768 px) y solape alto (0.3-0.4)."
+        )
+        weed_hint.setWordWrap(True)
+        wform.addRow("", weed_hint)
+
+        weed_group.setLayout(wform)
+        layout.addWidget(weed_group)
+
+        weed_actions_layout = QHBoxLayout()
+        self.weed_detect_btn = QPushButton("Detectar Malezas")
+        self.weed_detect_btn.clicked.connect(self.on_weed_detect_clicked)
+        weed_actions_layout.addWidget(self.weed_detect_btn)
+
+        self.weed_paint_btn = QPushButton("Pintar Parcelas por Infestación")
+        self.weed_paint_btn.clicked.connect(self.on_paint_weed_clicked)
+        self.weed_paint_btn.setEnabled(False)
+        weed_actions_layout.addWidget(self.weed_paint_btn)
+
+        self.weed_report_btn = QPushButton("Reporte de Malezas (CSV)")
+        self.weed_report_btn.clicked.connect(self.on_weed_report_clicked)
+        self.weed_report_btn.setEnabled(False)
+        weed_actions_layout.addWidget(self.weed_report_btn)
+        layout.addLayout(weed_actions_layout)
+
+        layout.addWidget(QLabel("Resultados de malezas por parcela:"))
+        self.weed_results_table = QTableWidget(0, 6)
+        self.weed_results_table.setHorizontalHeaderLabels(
+            ["Parcela", "Área (m²)", "Malezas", "Cultivo", "Cobertura (%)", "Infestación"]
+        )
+        self.weed_results_table.horizontalHeader().setStretchLastSection(True)
+        layout.addWidget(self.weed_results_table)
 
         self.rows_rgb_btn = QPushButton("Detectar líneas de siembra y posibles fallas (RGB, sin modelo)")
         self.rows_rgb_btn.setToolTip("Heurística RGB (ExG + seguimiento de crestas). No requiere ningún modelo entrenado.")
@@ -263,6 +326,14 @@ class PrecisionAgDialog(QDialog):
                     self._row_lines_defaults["weights_path"] = candidate
             if "conf_threshold" in row_lines_cfg:
                 self._row_lines_defaults["conf_threshold"] = float(row_lines_cfg["conf_threshold"])
+
+            weed_cfg = ai_cfg.get("weed_detection", {})
+            weed_weights = weed_cfg.get("weights_path")
+            if weed_weights:
+                candidate = weed_weights if os.path.isabs(weed_weights) else os.path.join(project_root, weed_weights)
+                if os.path.exists(candidate):
+                    self.weed_weights_widget.setFilePath(candidate)
+            self.weed_conf_spin.setValue(float(weed_cfg.get("conf_threshold", 0.25)))
         except Exception as e:
             self._log(f"No se pudo cargar config/default.yaml ({e}). Usando valores por defecto.")
 
@@ -340,6 +411,7 @@ class PrecisionAgDialog(QDialog):
         self.detect_btn.setEnabled(not running)
         self.rows_btn.setEnabled(not running and self._veg_task is None)
         self.rows_rgb_btn.setEnabled(not running and self._veg_task is None)
+        self.weed_detect_btn.setEnabled(not running)
         self.cancel_btn.setEnabled(running)
         self.progress_bar.setValue(0)
 
@@ -347,6 +419,10 @@ class PrecisionAgDialog(QDialog):
         if self._row_task is not None:
             self._row_task.cancel()
             self._log("Cancelando análisis de surcos...")
+            return
+        if self._weed_task is not None:
+            self._weed_task.cancel()
+            self._log("Cancelando detección de malezas...")
             return
         if self._task is not None:
             self._task.cancel()
@@ -426,6 +502,198 @@ class PrecisionAgDialog(QDialog):
         self._apply_categorized_renderer(self._analysis_layer, "densidad_clase", _DENSITY_COLORS)
         self._log("Parcelas coloreadas por 'densidad_clase' (Alta=verde, Media=amarillo, Baja=rojo).")
 
+    # -------------------------------------------------------- Malezas
+
+    def on_weed_detect_clicked(self) -> None:
+        if self._task is not None or self._veg_task is not None or self._row_task is not None or self._weed_task is not None:
+            return
+
+        raster_layer = self.raster_combo.currentLayer()
+        parcels_layer = self.parcels_combo.currentLayer()
+        if raster_layer is None or parcels_layer is None:
+            QMessageBox.warning(self, "Faltan capas", "Selecciona un ortomosaico y una capa de parcelas.")
+            return
+
+        weights_path = self.weed_weights_widget.filePath()
+        if not weights_path or not os.path.exists(weights_path):
+            QMessageBox.warning(
+                self, "Modelo no encontrado",
+                "Selecciona un archivo de pesos YOLO (.pt) entrenado para detectar malezas."
+            )
+            return
+
+        raster_path = layer_source_path(raster_layer)
+        if not raster_path:
+            QMessageBox.warning(
+                self, "Ortomosaico no válido",
+                "No se pudo resolver la ruta del archivo del ortomosaico "
+                "(debe ser una capa respaldada por un archivo, ej. GeoTIFF)."
+            )
+            return
+
+        try:
+            from .qgis_bridge import qgs_vector_layer_to_geodataframe
+            parcelas_gdf = qgs_vector_layer_to_geodataframe(parcels_layer)
+        except Exception as e:
+            QMessageBox.critical(self, "Error al leer parcelas", str(e))
+            return
+
+        if parcelas_gdf.crs is None:
+            QMessageBox.warning(self, "CRS no definido", "La capa de parcelas no tiene un CRS definido.")
+            return
+
+        params = {
+            "raster_path": raster_path,
+            "parcelas_gdf": parcelas_gdf,
+            "weights_path": weights_path,
+            "device": self.device_combo.currentText(),
+            "conf_threshold": self.weed_conf_spin.value(),
+            "iou_threshold": self.iou_spin.value(),
+            "tile_size": self.tile_spin.value(),
+            "overlap": self.overlap_spin.value(),
+        }
+
+        self._set_weed_running(True)
+        self._log("Iniciando detección de malezas...")
+
+        self._weed_task = WeedAnalysisTask(params)
+        self._weed_task.taskCompleted.connect(self._on_weed_completed)
+        self._weed_task.taskTerminated.connect(self._on_weed_terminated)
+        self._weed_task.progressChanged.connect(lambda p: self.progress_bar.setValue(int(p)))
+        QgsApplication.taskManager().addTask(self._weed_task)
+
+    def _set_weed_running(self, running: bool) -> None:
+        self.weed_detect_btn.setEnabled(not running)
+        self.detect_btn.setEnabled(not running)
+        self.rows_btn.setEnabled(not running and self._veg_task is None)
+        self.rows_rgb_btn.setEnabled(not running and self._veg_task is None)
+        self.veg_calc_btn.setEnabled(not running)
+        self.cancel_btn.setEnabled(running)
+        self.progress_bar.setValue(0)
+
+    def _on_weed_completed(self) -> None:
+        self._set_weed_running(False)
+        result = self._weed_task.result
+        was_canceled = self._weed_task.isCanceled()
+        self._weed_task = None
+
+        self._last_weed_result = result
+        self.progress_bar.setValue(100)
+        n_malezas = len(result["malezas_poly_gdf"])
+        n_cultivo = len(result["cultivo_poly_gdf"])
+        if was_canceled:
+            self._log(
+                f"Detección de malezas cancelada. Resultados parciales: {n_malezas} malezas "
+                f"y {n_cultivo} plantas de cultivo detectadas antes de cancelar."
+            )
+        elif result["has_crop_class"]:
+            self._log(f"Detección de malezas finalizada: {n_malezas} malezas y {n_cultivo} plantas de cultivo.")
+        else:
+            self._log(
+                f"Detección de malezas finalizada: {n_malezas} malezas detectadas "
+                "(el modelo no distingue una clase de cultivo aparte; la infestación se clasificó por densidad)."
+            )
+
+        self._populate_weed_results_table(result["parcelas_gdf"])
+
+        try:
+            malezas_layer = geodataframe_to_qgs_layer(result["malezas_poly_gdf"], "Malezas detectadas")
+            self._style_box_layer(malezas_layer, QColor(255, 37, 37))
+            if n_cultivo > 0:
+                cultivo_layer = geodataframe_to_qgs_layer(result["cultivo_poly_gdf"], "Cultivo detectado")
+                self._style_box_layer(cultivo_layer, QColor(26, 152, 80))
+            self._weed_layer = geodataframe_to_qgs_layer(result["parcelas_gdf"], "Parcelas - malezas")
+            self._log("Capa 'Malezas detectadas' (polígonos alrededor de cada maleza) añadida al proyecto.")
+        except Exception as e:
+            self._log(f"No se pudieron crear las capas de resultado: {e}")
+            self._weed_layer = None
+
+        self.weed_paint_btn.setEnabled(self._weed_layer is not None)
+        self.weed_report_btn.setEnabled(True)
+
+    def _style_box_layer(self, layer, color: QColor) -> None:
+        """Relleno apenas visible y borde sólido: marca el recuadro detectado sin tapar
+        el ortomosaico por debajo."""
+        symbol = layer.renderer().symbol()
+        fill_color = QColor(color)
+        fill_color.setAlpha(40)
+        symbol.setColor(fill_color)
+        symbol_layer = symbol.symbolLayer(0)
+        symbol_layer.setStrokeColor(color)
+        symbol_layer.setStrokeWidth(0.5)
+        layer.triggerRepaint()
+
+    def _on_weed_terminated(self) -> None:
+        error = self._weed_task.error if self._weed_task is not None else None
+        self._set_weed_running(False)
+        self._weed_task = None
+
+        if error is not None:
+            self._log(f"Error: {error}")
+            QMessageBox.critical(self, "Error durante la detección de malezas", str(error))
+        else:
+            self._log("La tarea de detección de malezas terminó de forma inesperada.")
+
+    def _populate_weed_results_table(self, parcelas_gdf) -> None:
+        self.weed_results_table.setRowCount(0)
+        id_col = self._last_weed_result["id_col"]
+        has_crop_class = self._last_weed_result["has_crop_class"]
+        for _, row in parcelas_gdf.iterrows():
+            r = self.weed_results_table.rowCount()
+            self.weed_results_table.insertRow(r)
+            self.weed_results_table.setItem(r, 0, QTableWidgetItem(str(row[id_col])))
+            self.weed_results_table.setItem(r, 1, QTableWidgetItem(f"{row['area_m2']:.1f}"))
+            self.weed_results_table.setItem(r, 2, QTableWidgetItem(str(row["num_malezas"])))
+            self.weed_results_table.setItem(r, 3, QTableWidgetItem(str(row["num_cultivo"])))
+            cobertura = row["cobertura_malezas"]
+            if cobertura != cobertura:  # NaN
+                cobertura_text = "-"
+            elif has_crop_class:
+                cobertura_text = f"{cobertura * 100:.1f}%"
+            else:
+                cobertura_text = f"{cobertura:.4f} pl/m²"
+            self.weed_results_table.setItem(r, 4, QTableWidgetItem(cobertura_text))
+            self.weed_results_table.setItem(r, 5, QTableWidgetItem(str(row["infestacion_clase"])))
+
+    def on_paint_weed_clicked(self) -> None:
+        if self._last_weed_result is None or self._weed_layer is None:
+            QMessageBox.warning(self, "Sin resultados", "Primero ejecuta 'Detectar Malezas'.")
+            return
+
+        self._apply_categorized_renderer(self._weed_layer, "infestacion_clase", _INFESTATION_COLORS)
+        self._log("Parcelas coloreadas por 'infestacion_clase' (Baja=verde, Media=amarillo, Alta=rojo).")
+
+    def on_weed_report_clicked(self) -> None:
+        if self._last_weed_result is None:
+            QMessageBox.warning(self, "Sin resultados", "Primero ejecuta 'Detectar Malezas'.")
+            return
+
+        output_path, _ = QFileDialog.getSaveFileName(
+            self, "Guardar reporte de malezas", "malezas_por_parcela.csv", "CSV (*.csv)"
+        )
+        if not output_path:
+            return
+
+        try:
+            id_col = self._last_weed_result["id_col"]
+            parcelas_gdf = self._last_weed_result["parcelas_gdf"]
+            columns = [id_col, "area_m2", "num_malezas", "num_cultivo", "cobertura_malezas", "infestacion_clase"]
+            df = parcelas_gdf[columns].rename(columns={
+                id_col: "Parcela",
+                "area_m2": "Area_m2",
+                "num_malezas": "Num_Malezas",
+                "num_cultivo": "Num_Cultivo",
+                "cobertura_malezas": "Cobertura_Malezas",
+                "infestacion_clase": "Infestacion",
+            })
+            df.to_csv(output_path, index=False, encoding="utf-8")
+            self._log(f"Reporte de malezas exportado a: {output_path}")
+            self.iface.messageBar().pushMessage(
+                "Agricultura de Precisión", f"Reporte de malezas generado: {output_path}", level=Qgis.MessageLevel.Success
+            )
+        except Exception as e:
+            QMessageBox.critical(self, "Error al exportar", str(e))
+
     # ------------------------------------------------ Índice de vegetación
 
     def on_rows_clicked(self) -> None:
@@ -435,7 +703,7 @@ class PrecisionAgDialog(QDialog):
         self._run_row_analysis(include_yolo=False)
 
     def _run_row_analysis(self, include_yolo: bool) -> None:
-        if self._task is not None or self._veg_task is not None or self._row_task is not None:
+        if self._task is not None or self._veg_task is not None or self._row_task is not None or self._weed_task is not None:
             return
         raster = self.raster_combo.currentLayer()
         parcels = self.parcels_combo.currentLayer()
@@ -566,6 +834,7 @@ class PrecisionAgDialog(QDialog):
         self.rows_rgb_btn.setEnabled(False)
         self.detect_btn.setEnabled(False)
         self.veg_calc_btn.setEnabled(False)
+        self.weed_detect_btn.setEnabled(False)
         self.cancel_btn.setEnabled(True)
         self.progress_bar.setValue(0)
         self._row_task.progressChanged.connect(lambda value: self.progress_bar.setValue(int(value)))
@@ -583,6 +852,7 @@ class PrecisionAgDialog(QDialog):
         self.rows_rgb_btn.setEnabled(True)
         self.detect_btn.setEnabled(True)
         self.veg_calc_btn.setEnabled(True)
+        self.weed_detect_btn.setEnabled(True)
         self.cancel_btn.setEnabled(False)
 
     def _on_rows_completed(self):
@@ -666,6 +936,7 @@ class PrecisionAgDialog(QDialog):
         self._veg_task = VegetationIndexTask(params)
         self.rows_btn.setEnabled(False)
         self.rows_rgb_btn.setEnabled(False)
+        self.weed_detect_btn.setEnabled(False)
         self._veg_task.taskCompleted.connect(self._on_vegetation_completed)
         self._veg_task.taskTerminated.connect(self._on_vegetation_terminated)
         QgsApplication.taskManager().addTask(self._veg_task)
@@ -677,6 +948,7 @@ class PrecisionAgDialog(QDialog):
 
         self.rows_btn.setEnabled(self._task is None and self._row_task is None)
         self.rows_rgb_btn.setEnabled(self._task is None and self._row_task is None)
+        self.weed_detect_btn.setEnabled(self._task is None and self._row_task is None)
 
         self._last_vegetation_result = result
         prefix = result["prefix"]
@@ -699,6 +971,7 @@ class PrecisionAgDialog(QDialog):
         self._veg_task = None
         self.rows_btn.setEnabled(self._task is None and self._row_task is None)
         self.rows_rgb_btn.setEnabled(self._task is None and self._row_task is None)
+        self.weed_detect_btn.setEnabled(self._task is None and self._row_task is None)
 
         if error is not None:
             self._log(f"Error: {error}")

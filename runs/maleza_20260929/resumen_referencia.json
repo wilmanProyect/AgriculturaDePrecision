@@ -1,0 +1,29 @@
+{
+  "candidates": 6493,
+  "candidate_area_m2": 775.1829140508517,
+  "reference_area_m2": 0.3388884418001137,
+  "training_pixels": 60,
+  "color_mean": [
+    0.3633621633052826,
+    0.2464226931333542,
+    0.3949665427207947
+  ],
+  "color_distance_threshold": 4.806693871805985,
+  "min_area_m2": 0.05083326627001705,
+  "max_area_m2": 1.6944422090005684,
+  "reference_recovered": true,
+  "all_inside": true,
+  "valid_geometries": true,
+  "inputs": [
+    "result.tif",
+    "poligono id=1 (limite)",
+    "poligono id=2 (maleza confirmada por usuario)"
+  ],
+  "method": "Similitud de color normalizado y brillo; segmentacion de manchas. No usa capas de siembra.",
+  "limitations": "Una sola muestra; similitud no es probabilidad de maleza. No identifica especie ni garantiza distinguir toda la soya.",
+  "filtered_candidates": 100,
+  "filtered_candidate_area_m2": 13.799999998674295,
+  "object_color_distance_max": 2.3548723231587143,
+  "object_area_min_m2": 0.08999999993204276,
+  "object_area_max_m2": 0.6777768836002274
+}

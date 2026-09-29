@@ -1,0 +1,221 @@
+{
+  "samples": [
+    {
+      "sample_id": 0,
+      "class_id": 1,
+      "pixels": 86
+    },
+    {
+      "sample_id": 1,
+      "class_id": 1,
+      "pixels": 142
+    },
+    {
+      "sample_id": 2,
+      "class_id": 1,
+      "pixels": 282
+    },
+    {
+      "sample_id": 3,
+      "class_id": 1,
+      "pixels": 336
+    },
+    {
+      "sample_id": 4,
+      "class_id": 1,
+      "pixels": 428
+    },
+    {
+      "sample_id": 5,
+      "class_id": 1,
+      "pixels": 438
+    },
+    {
+      "sample_id": 6,
+      "class_id": 1,
+      "pixels": 307
+    },
+    {
+      "sample_id": 7,
+      "class_id": 1,
+      "pixels": 191
+    },
+    {
+      "sample_id": 8,
+      "class_id": 1,
+      "pixels": 29
+    },
+    {
+      "sample_id": 9,
+      "class_id": 0,
+      "pixels": 600
+    },
+    {
+      "sample_id": 10,
+      "class_id": 0,
+      "pixels": 434
+    },
+    {
+      "sample_id": 11,
+      "class_id": 0,
+      "pixels": 600
+    },
+    {
+      "sample_id": 12,
+      "class_id": 0,
+      "pixels": 403
+    },
+    {
+      "sample_id": 13,
+      "class_id": 0,
+      "pixels": 600
+    }
+  ],
+  "validation": "Leave-one-polygon-out; nearby polygons still spatially correlated",
+  "validation_auc_pixels": 0.6069369942937646,
+  "selected_threshold": {
+    "threshold": 0.9800000000000003,
+    "weed_recall_mean_polygon": 0.07824743359866734,
+    "soy_false_positive_mean_polygon": 0.0578141321044547,
+    "soy_false_positive_worst_polygon": 0.26
+  },
+  "threshold_curve": [
+    {
+      "threshold": 0.6,
+      "weed_recall_mean_polygon": 0.5628475213483338,
+      "soy_false_positive_mean_polygon": 0.2434285714285714,
+      "soy_false_positive_worst_polygon": 0.5333333333333333
+    },
+    {
+      "threshold": 0.62,
+      "weed_recall_mean_polygon": 0.5502866597955969,
+      "soy_false_positive_mean_polygon": 0.23901807869549802,
+      "soy_false_positive_worst_polygon": 0.5283333333333333
+    },
+    {
+      "threshold": 0.64,
+      "weed_recall_mean_polygon": 0.539575704627971,
+      "soy_false_positive_mean_polygon": 0.22934633108826658,
+      "soy_false_positive_worst_polygon": 0.52
+    },
+    {
+      "threshold": 0.66,
+      "weed_recall_mean_polygon": 0.5279961862128713,
+      "soy_false_positive_mean_polygon": 0.22143211627082593,
+      "soy_false_positive_worst_polygon": 0.5133333333333333
+    },
+    {
+      "threshold": 0.68,
+      "weed_recall_mean_polygon": 0.5179572644221424,
+      "soy_false_positive_mean_polygon": 0.2135962424672102,
+      "soy_false_positive_worst_polygon": 0.5033333333333333
+    },
+    {
+      "threshold": 0.7000000000000001,
+      "weed_recall_mean_polygon": 0.5021122997042552,
+      "soy_false_positive_mean_polygon": 0.20676036866359446,
+      "soy_false_positive_worst_polygon": 0.49666666666666665
+    },
+    {
+      "threshold": 0.7200000000000001,
+      "weed_recall_mean_polygon": 0.4775544871209164,
+      "soy_false_positive_mean_polygon": 0.19632872503840246,
+      "soy_false_positive_worst_polygon": 0.48333333333333334
+    },
+    {
+      "threshold": 0.7400000000000001,
+      "weed_recall_mean_polygon": 0.46193686432816367,
+      "soy_false_positive_mean_polygon": 0.188357910906298,
+      "soy_false_positive_worst_polygon": 0.475
+    },
+    {
+      "threshold": 0.7600000000000001,
+      "weed_recall_mean_polygon": 0.4428713607102767,
+      "soy_false_positive_mean_polygon": 0.17921044546851,
+      "soy_false_positive_worst_polygon": 0.4666666666666667
+    },
+    {
+      "threshold": 0.7800000000000001,
+      "weed_recall_mean_polygon": 0.4262377302247311,
+      "soy_false_positive_mean_polygon": 0.17157296466973887,
+      "soy_false_positive_worst_polygon": 0.455
+    },
+    {
+      "threshold": 0.8000000000000002,
+      "weed_recall_mean_polygon": 0.41130700913192947,
+      "soy_false_positive_mean_polygon": 0.1651121351766513,
+      "soy_false_positive_worst_polygon": 0.44333333333333336
+    },
+    {
+      "threshold": 0.8200000000000002,
+      "weed_recall_mean_polygon": 0.39300391674564267,
+      "soy_false_positive_mean_polygon": 0.1591904761904762,
+      "soy_false_positive_worst_polygon": 0.43
+    },
+    {
+      "threshold": 0.8400000000000002,
+      "weed_recall_mean_polygon": 0.3720986239322336,
+      "soy_false_positive_mean_polygon": 0.15275883256528416,
+      "soy_false_positive_worst_polygon": 0.4216666666666667
+    },
+    {
+      "threshold": 0.8600000000000002,
+      "weed_recall_mean_polygon": 0.34954252456591656,
+      "soy_false_positive_mean_polygon": 0.14504301075268816,
+      "soy_false_positive_worst_polygon": 0.4116666666666667
+    },
+    {
+      "threshold": 0.8800000000000002,
+      "weed_recall_mean_polygon": 0.3295091867153108,
+      "soy_false_positive_mean_polygon": 0.13640552995391705,
+      "soy_false_positive_worst_polygon": 0.4066666666666667
+    },
+    {
+      "threshold": 0.9000000000000002,
+      "weed_recall_mean_polygon": 0.29870668278452495,
+      "soy_false_positive_mean_polygon": 0.1263364055299539,
+      "soy_false_positive_worst_polygon": 0.40166666666666667
+    },
+    {
+      "threshold": 0.9200000000000003,
+      "weed_recall_mean_polygon": 0.2537271423821476,
+      "soy_false_positive_mean_polygon": 0.11111981566820277,
+      "soy_false_positive_worst_polygon": 0.3933333333333333
+    },
+    {
+      "threshold": 0.9400000000000003,
+      "weed_recall_mean_polygon": 0.188876917206427,
+      "soy_false_positive_mean_polygon": 0.09641321044546851,
+      "soy_false_positive_worst_polygon": 0.38
+    },
+    {
+      "threshold": 0.9600000000000003,
+      "weed_recall_mean_polygon": 0.13699007700474072,
+      "soy_false_positive_mean_polygon": 0.0767357910906298,
+      "soy_false_positive_worst_polygon": 0.33666666666666667
+    },
+    {
+      "threshold": 0.9800000000000003,
+      "weed_recall_mean_polygon": 0.07824743359866734,
+      "soy_false_positive_mean_polygon": 0.0578141321044547,
+      "soy_false_positive_worst_polygon": 0.26
+    }
+  ],
+  "method": "Random Forest RGB + multiscale texture, user-labelled weeds and soybean",
+  "inputs": [
+    "result.tif",
+    "poligono id=1",
+    "maleza (9 user polygons)",
+    "Soya (5 user polygons)"
+  ],
+  "limitations": [
+    "Small geographically clustered training sample; not independent field validation.",
+    "Tree votes are not calibrated probabilities. No YOLO model was trained.",
+    "Vegetation pixels only; masked soil/NoData not classified. No sowing line/failure inputs."
+  ],
+  "candidates": 711,
+  "candidate_area_m2": 78.99499999539904,
+  "valid_geometries": true,
+  "all_inside": true,
+  "status": "RECHAZADO: confunde soya en validacion; no cargar sus predicciones como resultado"
+}

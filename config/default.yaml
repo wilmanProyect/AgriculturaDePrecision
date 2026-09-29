@@ -12,6 +12,11 @@ ai:
   classes:
     0: Plant
 
+  weed_detection:
+    # Modelo YOLO11 entrenado sobre el dataset crop_weed (clases: crop, weed).
+    weights_path: data/models/crop_weed/weights/best.pt
+    conf_threshold: 0.25
+
   row_lines:
     # Vacío a propósito: row_lines_pose-2 (YOLO11m-pose, dataset "Crop-row") no generaliza
     # sobre ortomosaico real (ver docs/BITACORA.md) y no conviene precargarlo como default.

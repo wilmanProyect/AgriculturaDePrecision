@@ -1,0 +1,82 @@
+{
+  "candidates": 151,
+  "candidate_area_m2": 47.07999999876786,
+  "cross_validation_pixel_consensus_before_shape_filters": [
+    {
+      "group": 0,
+      "class_id": 1,
+      "positive_fraction": 0.09302325581395349
+    },
+    {
+      "group": 1,
+      "class_id": 1,
+      "positive_fraction": 0.1619718309859155
+    },
+    {
+      "group": 2,
+      "class_id": 1,
+      "positive_fraction": 0.07092198581560284
+    },
+    {
+      "group": 3,
+      "class_id": 1,
+      "positive_fraction": 0.0
+    },
+    {
+      "group": 4,
+      "class_id": 1,
+      "positive_fraction": 0.0
+    },
+    {
+      "group": 5,
+      "class_id": 1,
+      "positive_fraction": 0.0
+    },
+    {
+      "group": 6,
+      "class_id": 1,
+      "positive_fraction": 0.0781758957654723
+    },
+    {
+      "group": 7,
+      "class_id": 1,
+      "positive_fraction": 0.17801047120418848
+    },
+    {
+      "group": 8,
+      "class_id": 1,
+      "positive_fraction": 0.0
+    },
+    {
+      "group": 9,
+      "class_id": 0,
+      "positive_fraction": 0.0
+    },
+    {
+      "group": 10,
+      "class_id": 0,
+      "positive_fraction": 0.0
+    },
+    {
+      "group": 11,
+      "class_id": 0,
+      "positive_fraction": 0.0
+    },
+    {
+      "group": 12,
+      "class_id": 0,
+      "positive_fraction": 0.0
+    },
+    {
+      "group": 13,
+      "class_id": 0,
+      "positive_fraction": 0.0
+    }
+  ],
+  "note": "Exploratory consensus; strict filter misses weeds. Not independently validated. Color-only and broad texture outputs rejected for soybean false positives.",
+  "all_inside": true,
+  "all_valid": true,
+  "status": "REJECTED_BY_USER",
+  "user_validation": "El usuario informa que la deteccion no fue exitosa y no se detecto ninguna maleza.",
+  "usable_as_weed_detection": false
+}

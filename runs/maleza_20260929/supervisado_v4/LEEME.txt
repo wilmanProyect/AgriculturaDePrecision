@@ -1,0 +1,13 @@
+Analisis exploratorio supervisado con 9 poligonos de maleza y 5 de soya del usuario.
+Entradas: ortomosaico result.tif, limite poligono id=1 y anotaciones de las dos clases. No se usan lineas ni fallas de siembra.
+Modelo: Random Forest con color RGB normalizado y textura hasta 1 metro. No es YOLO.
+Evaluacion: exclusion de un poligono completo por vez; no son muestras independientes de otro lote y las muestras cercanas comparten contexto. Se compararon variantes con estas mismas muestras, por lo que no es una estimacion independiente de precision.
+Filtro conservador: voto del clasificador >= 0.98. El voto NO es una probabilidad calibrada de maleza.
+En esta comprobacion interna: promedio por poligono de pixeles de maleza recuperados 44.8%; pixeles de soya marcados 0% en las cinco muestras, sin garantia para el resto del lote.
+Areas marcadas son candidatos parciales, no infestacion total ni conteo de plantas. Es posible omitir maleza y confundir soya fuera de las muestras.
+La capa de salida no modifica ni guarda cambios pendientes de las anotaciones originales de QGIS.
+
+SALIDA FINAL PARA REVISION: maleza_revision_conservadora.gpkg (151 candidatos). Consenso de modelos V3>=0.98 y V4>=0.99 (rasters de votos redondeados a enteros), area >=0.18 m2 y <=3 m2, alargamiento <=2.5, solidez >=0.55.
+La comprobacion del consenso sobre pixeles excluidos (antes del filtro de forma) recupera solamente 6.5% de maleza en promedio por poligono y marca 0% de soya en las cinco muestras; no acredita precision fuera de ellas. Es una salida de ensayo muy incompleta. Las salidas amplias maleza_supervisada.gpkg NO son el resultado final por sus falsos positivos visuales.
+
+REVISION DEL USUARIO: resultado rechazado; no se detecto ninguna maleza. Los 151 candidatos NO son detecciones validas ni etiquetas para entrenamiento. No utilizar esta salida para medir infestacion.
