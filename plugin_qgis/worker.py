@@ -393,8 +393,11 @@ class VegetationIndexTask(QgsTask):
 
     def run(self) -> bool:
         try:
+            if self.isCanceled():
+                return False
             self.result = self._run_zonal_stats()
-            return True
+            self.setProgress(100)
+            return not self.isCanceled()
         except Exception as e:
             logger.error(f"Fallo en la tarea de índice de vegetación: {e}")
             self.error = e

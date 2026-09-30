@@ -40,10 +40,13 @@ from qgis.PyQt.QtWidgets import (
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
+    QWidget,
+    QTabWidget,
+    QAbstractItemView,
 )
 
 from .qgis_bridge import geodataframe_to_qgs_layer, layer_source_path
-from .worker import DetectionTask, VegetationIndexTask, RowAnalysisTask, WeedAnalysisTask
+
 
 # Colores por clase de densidad: Alta (buena cobertura) -> verde, Baja -> rojo
 _DENSITY_COLORS = {
@@ -91,7 +94,8 @@ class PrecisionAgDialog(QDialog):
         self._weed_defaults = {}
 
         self.setWindowTitle("Agricultura de Precisión")
-        self.resize(600, 950)
+        self.resize(680, 720)
+        self._area_rows = []
 
         self._build_ui()
         self._load_defaults()
@@ -100,194 +104,173 @@ class PrecisionAgDialog(QDialog):
 
     def _build_ui(self) -> None:
         layout = QVBoxLayout(self)
-
-        inputs_group = QGroupBox("Entradas")
-        form = QFormLayout()
-
-        self.raster_combo = QgsMapLayerComboBox()
-        self.raster_combo.setFilters(QgsMapLayerProxyModel.Filter.RasterLayer)
-        form.addRow("Ortomosaico:", self.raster_combo)
-
+        title = QLabel("Analizador agrícola")
+        title.setStyleSheet("font-size: 20px; font-weight: bold;")
+        layout.addWidget(title)
+        intro = QLabel("Selecciona tus polígonos y elige una herramienta.")
+        layout.addWidget(intro)
         self.parcels_combo = QgsMapLayerComboBox()
         self.parcels_combo.setFilters(QgsMapLayerProxyModel.Filter.PolygonLayer)
-        form.addRow("Parcelas:", self.parcels_combo)
+        form = QFormLayout()
+        form.addRow("Capa de polígonos:", self.parcels_combo)
+        layout.addLayout(form)
+        tabs = QTabWidget()
+        layout.addWidget(tabs, 1)
 
-        self.weights_widget = QgsFileWidget()
-        self.weights_widget.setFilter("Modelos YOLO (*.pt)")
-        form.addRow("Pesos del modelo (.pt):", self.weights_widget)
+        area_page = QWidget()
+        area_layout = QVBoxLayout(area_page)
+        hint = QLabel("Calcula la superficie sin necesitar una imagen ni un modelo.")
+        hint.setWordWrap(True)
+        area_layout.addWidget(hint)
+        self.selected_only = QCheckBox("Medir solo los polígonos seleccionados en el mapa")
+        area_layout.addWidget(self.selected_only)
+        self.detect_btn = QPushButton("Calcular área")
+        self.detect_btn.clicked.connect(self.on_area_clicked)
+        area_layout.addWidget(self.detect_btn)
+        self.area_table = QTableWidget(0, 3)
+        self.area_table.setHorizontalHeaderLabels(["ID del elemento", "Área (m²)", "Área (ha)"])
+        self.area_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.area_table.horizontalHeader().setStretchLastSection(True)
+        area_layout.addWidget(self.area_table, 1)
+        self.area_summary = QLabel("Todavía no hay mediciones.")
+        self.area_summary.setWordWrap(True)
+        area_layout.addWidget(self.area_summary)
+        note = QLabel("Medición sobre el elipsoide WGS84. El total suma las superficies; los solapes se cuentan por cada polígono.")
+        note.setWordWrap(True)
+        area_layout.addWidget(note)
+        self.area_export_btn = QPushButton("Exportar áreas a CSV")
+        self.area_export_btn.setEnabled(False)
+        self.area_export_btn.clicked.connect(self.on_area_export_clicked)
+        area_layout.addWidget(self.area_export_btn)
+        tabs.addTab(area_page, "Área de polígonos")
 
-        inputs_group.setLayout(form)
-        layout.addWidget(inputs_group)
-
-        params_group = QGroupBox("Parámetros de inferencia")
-        pform = QFormLayout()
-
-        self.device_combo = QComboBox()
-        self.device_combo.addItems(["cpu", "cuda"])
-        pform.addRow("Device:", self.device_combo)
-
-        self.conf_spin = QDoubleSpinBox()
-        self.conf_spin.setRange(0.01, 1.0)
-        self.conf_spin.setSingleStep(0.05)
-        self.conf_spin.setValue(0.25)
-        pform.addRow("Confianza mínima:", self.conf_spin)
-
-        self.iou_spin = QDoubleSpinBox()
-        self.iou_spin.setRange(0.01, 1.0)
-        self.iou_spin.setSingleStep(0.05)
-        self.iou_spin.setValue(0.45)
-        pform.addRow("IoU (NMS):", self.iou_spin)
-
-        self.tile_spin = QSpinBox()
-        self.tile_spin.setRange(128, 4096)
-        self.tile_spin.setSingleStep(128)
-        self.tile_spin.setValue(1024)
-        pform.addRow("Tamaño de tile (px):", self.tile_spin)
-
-        self.overlap_spin = QDoubleSpinBox()
-        self.overlap_spin.setRange(0.0, 0.9)
-        self.overlap_spin.setSingleStep(0.05)
-        self.overlap_spin.setValue(0.2)
-        pform.addRow("Solape entre tiles:", self.overlap_spin)
-
-        params_group.setLayout(pform)
-        layout.addWidget(params_group)
-
-        actions_layout = QHBoxLayout()
-        self.detect_btn = QPushButton("Detectar y Contar Plantas")
-        self.detect_btn.clicked.connect(self.on_detect_clicked)
-        actions_layout.addWidget(self.detect_btn)
-
-        self.paint_btn = QPushButton("Pintar Parcelas por Densidad")
-        self.paint_btn.clicked.connect(self.on_paint_clicked)
-        self.paint_btn.setEnabled(False)
-        actions_layout.addWidget(self.paint_btn)
-
-        self.report_btn = QPushButton("Generar Reporte (CSV)")
-        self.report_btn.clicked.connect(self.on_report_clicked)
-        self.report_btn.setEnabled(False)
-        actions_layout.addWidget(self.report_btn)
-
-        self.cancel_btn = QPushButton("Cancelar")
-        self.cancel_btn.clicked.connect(self.on_cancel_clicked)
-        self.cancel_btn.setEnabled(False)
-        actions_layout.addWidget(self.cancel_btn)
-        layout.addLayout(actions_layout)
-
-        weed_group = QGroupBox("Detección de Malezas (cultivo vs. maleza)")
-        wform = QFormLayout()
-
-        self.weed_weights_widget = QgsFileWidget()
-        self.weed_weights_widget.setFilter("Modelos YOLO (*.pt)")
-        wform.addRow("Pesos del modelo cultivo/maleza (.pt):", self.weed_weights_widget)
-
-        self.weed_conf_spin = QDoubleSpinBox()
-        self.weed_conf_spin.setRange(0.01, 1.0)
-        self.weed_conf_spin.setSingleStep(0.05)
-        self.weed_conf_spin.setValue(0.25)
-        wform.addRow("Confianza mínima:", self.weed_conf_spin)
-
-        weed_hint = QLabel(
-            "Dibuja un polígono (el recuadro de YOLO) alrededor de cada maleza detectada, "
-            "en rojo. Usa el ortomosaico y las parcelas de 'Entradas' y el device/IoU/tile/"
-            "solape de 'Parámetros de inferencia'. Requiere un modelo YOLO con clase 'weed' "
-            "(ideal: también 'crop', ej. dataset crop_weed) entrenado sobre parches del propio "
-            "ortomosaico. A 85-100 m de altura de vuelo la maleza ocupa pocos píxeles: "
-            "conviene un tile pequeño (512-768 px) y solape alto (0.3-0.4)."
-        )
-        weed_hint.setWordWrap(True)
-        wform.addRow("", weed_hint)
-
-        weed_group.setLayout(wform)
-        layout.addWidget(weed_group)
-
-        weed_actions_layout = QHBoxLayout()
-        self.weed_detect_btn = QPushButton("Detectar Malezas")
-        self.weed_detect_btn.clicked.connect(self.on_weed_detect_clicked)
-        weed_actions_layout.addWidget(self.weed_detect_btn)
-
-        self.weed_paint_btn = QPushButton("Pintar Parcelas por Infestación")
-        self.weed_paint_btn.clicked.connect(self.on_paint_weed_clicked)
-        self.weed_paint_btn.setEnabled(False)
-        weed_actions_layout.addWidget(self.weed_paint_btn)
-
-        self.weed_report_btn = QPushButton("Reporte de Malezas (CSV)")
-        self.weed_report_btn.clicked.connect(self.on_weed_report_clicked)
-        self.weed_report_btn.setEnabled(False)
-        weed_actions_layout.addWidget(self.weed_report_btn)
-        layout.addLayout(weed_actions_layout)
-
-        layout.addWidget(QLabel("Resultados de malezas por parcela:"))
-        self.weed_results_table = QTableWidget(0, 6)
-        self.weed_results_table.setHorizontalHeaderLabels(
-            ["Parcela", "Área (m²)", "Malezas", "Cultivo", "Cobertura (%)", "Infestación"]
-        )
-        self.weed_results_table.horizontalHeader().setStretchLastSection(True)
-        layout.addWidget(self.weed_results_table)
-
-        self.rows_rgb_btn = QPushButton("Detectar líneas de siembra y posibles fallas (RGB, sin modelo)")
-        self.rows_rgb_btn.setToolTip("Heurística RGB (ExG + seguimiento de crestas). No requiere ningún modelo entrenado.")
+        analysis_page = QWidget()
+        analysis_layout = QVBoxLayout(analysis_page)
+        self.raster_combo = QgsMapLayerComboBox()
+        self.raster_combo.setFilters(QgsMapLayerProxyModel.Filter.RasterLayer)
+        image_form = QFormLayout()
+        image_form.addRow("Ortomosaico RGB:", self.raster_combo)
+        analysis_layout.addLayout(image_form)
+        self.rows_rgb_btn = QPushButton("Identificar líneas de siembra y posibles fallas")
         self.rows_rgb_btn.clicked.connect(self.on_rows_rgb_clicked)
-        layout.addWidget(self.rows_rgb_btn)
-
-        self.rows_btn = QPushButton("Detectar líneas de siembra (avanzado: RGB o modelo YOLO)")
-        self.rows_btn.setToolTip("Igual que el anterior, pero permite indicar un modelo YOLO (segmentación o pose) entrenado.")
-        self.rows_btn.clicked.connect(self.on_rows_clicked)
-        layout.addWidget(self.rows_btn)
-
-        veg_group = QGroupBox("Índice de Vegetación (NDVI / NDRE / RGB)")
-        vform = QFormLayout()
-
-        self.veg_raster_combo = QgsMapLayerComboBox()
-        self.veg_raster_combo.setFilters(QgsMapLayerProxyModel.Filter.RasterLayer)
-        vform.addRow("Ráster de índice / ortomosaico:", self.veg_raster_combo)
-
+        analysis_layout.addWidget(self.rows_rgb_btn)
+        row_hint = QLabel("Las líneas y posibles fallas se estiman desde la imagen. Revisa el resultado en el mapa.")
+        row_hint.setWordWrap(True)
+        analysis_layout.addWidget(row_hint)
+        veg_group = QGroupBox("Vegetación en el ortomosaico")
+        vform = QFormLayout(veg_group)
         self.veg_index_combo = QComboBox()
-        self.veg_index_combo.addItems(["ndvi", "ndre", "exg", "vari"])
-        self.veg_index_combo.currentTextChanged.connect(self._update_veg_index_hint)
-        vform.addRow("Tipo de índice:", self.veg_index_combo)
-
+        self.veg_index_combo.addItems(["exg", "vari"])
+        vform.addRow("Índice RGB:", self.veg_index_combo)
         self.veg_index_hint = QLabel()
         self.veg_index_hint.setWordWrap(True)
-        vform.addRow("", self.veg_index_hint)
-
-        veg_group.setLayout(vform)
-        layout.addWidget(veg_group)
-        self._update_veg_index_hint(self.veg_index_combo.currentText())
-
-        veg_actions_layout = QHBoxLayout()
-        self.veg_calc_btn = QPushButton("Calcular Índice de Vegetación")
+        vform.addRow(self.veg_index_hint)
+        self.veg_index_combo.currentTextChanged.connect(self._update_veg_index_hint)
+        self._update_veg_index_hint("exg")
+        self.veg_calc_btn = QPushButton("Calcular índice de vegetación")
         self.veg_calc_btn.clicked.connect(self.on_vegetation_clicked)
-        veg_actions_layout.addWidget(self.veg_calc_btn)
-
-        self.veg_paint_btn = QPushButton("Pintar Parcelas por Vigor Vegetal")
+        vform.addRow(self.veg_calc_btn)
+        self.veg_paint_btn = QPushButton("Colorear polígonos por vegetación")
         self.veg_paint_btn.clicked.connect(self.on_paint_vegetation_clicked)
         self.veg_paint_btn.setEnabled(False)
-        veg_actions_layout.addWidget(self.veg_paint_btn)
-        layout.addLayout(veg_actions_layout)
+        vform.addRow(self.veg_paint_btn)
+        analysis_layout.addWidget(veg_group)
+        analysis_layout.addStretch()
+        tabs.addTab(analysis_page, "Análisis del ortomosaico")
 
+        # Keep legacy controls owned and hidden so existing callbacks remain compatible.
+        self._hidden_controls = QWidget(self)
+        self._hidden_controls.hide()
+        for name in ("paint_btn", "report_btn", "weed_detect_btn", "weed_paint_btn", "weed_report_btn", "rows_btn"):
+            setattr(self, name, QPushButton(self._hidden_controls))
+        for name in ("weights_widget", "weed_weights_widget"):
+            setattr(self, name, QgsFileWidget(self._hidden_controls))
+        self.device_combo = QComboBox(self._hidden_controls)
+        self.device_combo.addItems(["cpu", "cuda"])
+        for name, value in (("conf_spin", .25), ("iou_spin", .45), ("overlap_spin", .2), ("weed_conf_spin", .25)):
+            control = QDoubleSpinBox(self._hidden_controls)
+            control.setRange(0, 1)
+            control.setValue(value)
+            setattr(self, name, control)
+        self.tile_spin = QSpinBox(self._hidden_controls)
+        self.tile_spin.setRange(128, 4096)
+        self.tile_spin.setValue(1024)
+        self.results_table = QTableWidget(0, 5, self._hidden_controls)
+        self.weed_results_table = QTableWidget(0, 6, self._hidden_controls)
+        self.veg_raster_combo = self.raster_combo
+
+        status = QHBoxLayout()
         self.progress_bar = QProgressBar()
         self.progress_bar.setRange(0, 100)
-        layout.addWidget(self.progress_bar)
-
-        layout.addWidget(QLabel("Resultados por parcela:"))
-        self.results_table = QTableWidget(0, 5)
-        self.results_table.setHorizontalHeaderLabels(
-            ["Parcela", "Área (m²)", "Plantas", "Densidad (pl/m²)", "Clase"]
-        )
-        self.results_table.horizontalHeader().setStretchLastSection(True)
-        layout.addWidget(self.results_table)
-
+        self.progress_bar.setValue(0)
+        status.addWidget(self.progress_bar)
+        self.cancel_btn = QPushButton("Cancelar análisis")
+        self.cancel_btn.setEnabled(False)
+        self.cancel_btn.clicked.connect(self.on_cancel_clicked)
+        status.addWidget(self.cancel_btn)
+        layout.addLayout(status)
+        details = QGroupBox("Detalles de la operación")
+        details.setCheckable(True)
+        details.setChecked(False)
+        details_layout = QVBoxLayout(details)
         self.log_output = QPlainTextEdit()
         self.log_output.setReadOnly(True)
         self.log_output.setMaximumBlockCount(500)
-        self.log_output.setPlaceholderText("Estado de la operación...")
-        layout.addWidget(self.log_output)
-
+        self.log_output.setMaximumHeight(110)
+        self.log_output.hide()
+        details.toggled.connect(self.log_output.setVisible)
+        details_layout.addWidget(self.log_output)
+        layout.addWidget(details)
         button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
+        button_box.button(QDialogButtonBox.StandardButton.Close).setText("Cerrar")
         button_box.rejected.connect(self.reject)
-        button_box.accepted.connect(self.accept)
         layout.addWidget(button_box)
+        self.parcels_combo.layerChanged.connect(self._clear_area_results)
+        self.selected_only.toggled.connect(self._clear_area_results)
+
+    def _clear_area_results(self, *_):
+        self._area_rows = []
+        self.area_table.setRowCount(0)
+        self.area_summary.setText("Pulsa Calcular área para medir los polígonos actuales.")
+        self.area_export_btn.setEnabled(False)
+
+    def on_area_clicked(self):
+        from .area import measure_polygon_areas
+        self._clear_area_results()
+        try:
+            layer = self.parcels_combo.currentLayer()
+            rows = measure_polygon_areas(layer, self.selected_only.isChecked())
+        except Exception as exc:
+            QMessageBox.warning(self, "No se puede calcular el área", str(exc))
+            return
+        self._area_rows = rows
+        self.area_table.setRowCount(len(rows))
+        for index, (fid, m2, ha) in enumerate(rows):
+            for column, value in enumerate((str(fid), f"{m2:,.2f}", f"{ha:,.4f}")):
+                self.area_table.setItem(index, column, QTableWidgetItem(value))
+        total = sum(row[1] for row in rows)
+        self.area_summary.setText(f"{layer.name()} · {len(rows)} polígono(s) · Total: {total:,.2f} m² / {total / 10000:,.4f} ha")
+        self.area_export_btn.setEnabled(True)
+        self._log(self.area_summary.text())
+
+    def on_area_export_clicked(self):
+        if not self._area_rows:
+            return
+        path, _ = QFileDialog.getSaveFileName(self, "Guardar áreas", "areas_poligonos.csv", "CSV (*.csv)")
+        if not path:
+            return
+        if not path.lower().endswith(".csv"):
+            path += ".csv"
+        try:
+            import csv
+            with open(path, "w", newline="", encoding="utf-8-sig") as stream:
+                writer = csv.writer(stream)
+                writer.writerow(["ID_elemento", "Area_m2", "Area_ha"])
+                writer.writerows(self._area_rows)
+            self._log(f"Áreas exportadas: {path}")
+            self.iface.messageBar().pushMessage("Áreas", "CSV guardado correctamente", level=Qgis.MessageLevel.Success)
+        except Exception as exc:
+            QMessageBox.critical(self, "No se pudo exportar", str(exc))
 
     def _load_defaults(self) -> None:
         """Carga valores por defecto desde config/default.yaml del proyecto, si está disponible."""
@@ -401,6 +384,7 @@ class PrecisionAgDialog(QDialog):
         self._set_running(True)
         self._log("Iniciando detección de plantas...")
 
+        from .worker import DetectionTask
         self._task = DetectionTask(params)
         self._task.taskCompleted.connect(self._on_task_completed)
         self._task.taskTerminated.connect(self._on_task_terminated)
@@ -416,6 +400,10 @@ class PrecisionAgDialog(QDialog):
         self.progress_bar.setValue(0)
 
     def on_cancel_clicked(self) -> None:
+        if self._veg_task is not None:
+            self._veg_task.cancel()
+            self._log("Cancelando análisis de vegetación...")
+            return
         if self._row_task is not None:
             self._row_task.cancel()
             self._log("Cancelando análisis de surcos...")
@@ -556,6 +544,7 @@ class PrecisionAgDialog(QDialog):
         self._set_weed_running(True)
         self._log("Iniciando detección de malezas...")
 
+        from .worker import WeedAnalysisTask
         self._weed_task = WeedAnalysisTask(params)
         self._weed_task.taskCompleted.connect(self._on_weed_completed)
         self._weed_task.taskTerminated.connect(self._on_weed_terminated)
@@ -827,6 +816,7 @@ class PrecisionAgDialog(QDialog):
         except ValueError as exc:
             QMessageBox.warning(self, "Parámetros inválidos", str(exc))
             return
+        from .worker import RowAnalysisTask
         self._row_task = RowAnalysisTask(dict(raster_path=path, parcelas_gdf=gdf, options=options,
                                               output_dir=output.text().strip(), weights_path=weights_path,
                                               conf_threshold=conf_value, crs=row_crs))
@@ -900,14 +890,15 @@ class PrecisionAgDialog(QDialog):
             QMessageBox.critical(self, "Análisis de surcos", str(error))
 
     def on_vegetation_clicked(self) -> None:
+        if any(task is not None for task in (self._task, self._veg_task, self._row_task, self._weed_task)):
+            return
         raster_layer = self.veg_raster_combo.currentLayer()
         parcels_layer = self.parcels_combo.currentLayer()
 
         if raster_layer is None or parcels_layer is None:
             QMessageBox.warning(
                 self, "Faltan capas",
-                "Selecciona un ráster de índice (o el ortomosaico RGB, según el tipo) "
-                "y una capa de parcelas."
+                "Selecciona un ortomosaico RGB y una capa de polígonos."
             )
             return
 
@@ -931,26 +922,34 @@ class PrecisionAgDialog(QDialog):
         params = {"raster_path": raster_path, "parcelas_gdf": parcelas_gdf, "prefix": prefix}
 
         self.veg_calc_btn.setEnabled(False)
+        self.detect_btn.setEnabled(False)
+        self.cancel_btn.setEnabled(True)
+        self.progress_bar.setValue(0)
         self._log(f"Calculando {prefix.upper()} por parcela...")
 
+        from .worker import VegetationIndexTask
         self._veg_task = VegetationIndexTask(params)
         self.rows_btn.setEnabled(False)
         self.rows_rgb_btn.setEnabled(False)
         self.weed_detect_btn.setEnabled(False)
         self._veg_task.taskCompleted.connect(self._on_vegetation_completed)
         self._veg_task.taskTerminated.connect(self._on_vegetation_terminated)
+        self._veg_task.progressChanged.connect(lambda p: self.progress_bar.setValue(int(p)))
         QgsApplication.taskManager().addTask(self._veg_task)
 
     def _on_vegetation_completed(self) -> None:
         self.veg_calc_btn.setEnabled(True)
         result = self._veg_task.result
         self._veg_task = None
+        self.detect_btn.setEnabled(True)
+        self.cancel_btn.setEnabled(False)
 
         self.rows_btn.setEnabled(self._task is None and self._row_task is None)
         self.rows_rgb_btn.setEnabled(self._task is None and self._row_task is None)
         self.weed_detect_btn.setEnabled(self._task is None and self._row_task is None)
 
         self._last_vegetation_result = result
+        self.progress_bar.setValue(100)
         prefix = result["prefix"]
         parcelas_gdf = result["parcelas_gdf"]
 
@@ -969,6 +968,8 @@ class PrecisionAgDialog(QDialog):
         self.veg_calc_btn.setEnabled(True)
         error = self._veg_task.error if self._veg_task is not None else None
         self._veg_task = None
+        self.detect_btn.setEnabled(True)
+        self.cancel_btn.setEnabled(False)
         self.rows_btn.setEnabled(self._task is None and self._row_task is None)
         self.rows_rgb_btn.setEnabled(self._task is None and self._row_task is None)
         self.weed_detect_btn.setEnabled(self._task is None and self._row_task is None)
@@ -977,7 +978,7 @@ class PrecisionAgDialog(QDialog):
             self._log(f"Error: {error}")
             QMessageBox.critical(self, "Error al calcular el índice de vegetación", str(error))
         else:
-            self._log("El cálculo del índice de vegetación terminó de forma inesperada.")
+            self._log("Cálculo del índice de vegetación cancelado o interrumpido.")
 
     def on_paint_vegetation_clicked(self) -> None:
         if self._last_vegetation_result is None or self._vegetation_layer is None:

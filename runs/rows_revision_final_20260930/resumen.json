@@ -1,0 +1,24 @@
+{
+  "rows": 65023,
+  "gaps": 42210,
+  "vegetation_length_m": 68241.40277541666,
+  "gap_length_m": 33242.42774157464,
+  "warnings": [],
+  "note": "Context overlap and strict centerline vegetation. Experimental RGB; no agronomic ground truth.",
+  "all_inside": true,
+  "valid_geometries": true,
+  "validation": "32 automated tests passed; all geometries valid and inside boundary. Visual checks on two crops and live QGIS. No independent agronomic accuracy measurement.",
+  "qgis_layers": [
+    "Surcos RGB - revision 30-09",
+    "Posibles fallas RGB - revision 30-09"
+  ],
+  "options": {
+    "resolution_m": 0.026590172169540186,
+    "spacing_m": 0.45,
+    "min_gap_m": 0.2,
+    "vegetation_threshold": 0.065,
+    "min_row_m": 5.0,
+    "max_pixels": 12000000
+  },
+  "status": "WITHDRAWN: user requested rollback of this revision."
+}

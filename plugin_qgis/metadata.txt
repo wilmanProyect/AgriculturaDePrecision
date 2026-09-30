@@ -2,11 +2,11 @@
 name=Agricultura de Precision
 qgisMinimumVersion=3.28
 qgisMaximumVersion=4.99
-description=Deteccion de plantas con YOLO11, lineas de siembra RGB, posibles fallas en rojo y analisis por parcela.
-version=0.2.0
+description=Medicion de areas de poligonos, lineas de siembra RGB y analisis de vegetacion sobre ortomosaicos.
+version=0.3.0
 author=Agroptima
 email=tecnicogandarillas@gmail.com
-about=Integra el Motor GIS y el Motor IA (YOLO11 / Ultralytics) del proyecto AgriculturaDePrecision dentro de QGIS: detecta plantas sobre un ortomosaico, las cuenta por parcela, calcula densidad y colorea las parcelas automaticamente segun su clase de densidad.
+about=Interfaz simplificada para medir areas en metros cuadrados y hectareas, exportar CSV y analizar lineas de siembra e indices RGB desde un ortomosaico. Controles experimentales de IA ocultos.
 tracker=
 repository=
 category=Analysis

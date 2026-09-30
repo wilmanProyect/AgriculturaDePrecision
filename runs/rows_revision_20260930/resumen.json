@@ -1,0 +1,11 @@
+{
+  "rows": 45457,
+  "gaps": 32333,
+  "vegetation_length_m": 39997.46640289774,
+  "gap_length_m": 30264.166232788877,
+  "warnings": [],
+  "note": "Context overlap and strict centerline vegetation. Experimental RGB; no agronomic ground truth.",
+  "all_inside": true,
+  "valid_geometries": true,
+  "status": "REJECTED: green dominance too strict; missed olive soybean. Superseded by final revision."
+}

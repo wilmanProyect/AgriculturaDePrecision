@@ -1,0 +1,11 @@
+{
+  "rows": 887,
+  "gaps": 587,
+  "vegetation_length_m": 482.09616734955813,
+  "gap_length_m": 709.4430758918757,
+  "warnings": [],
+  "note": "Context overlap and strict centerline vegetation. Experimental RGB; no agronomic ground truth.",
+  "all_inside": true,
+  "valid_geometries": true,
+  "status": "WITHDRAWN: user requested rollback of this revision."
+}
